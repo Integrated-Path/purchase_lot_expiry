@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- Define dedicated category to avoid any base category XML ID breaking changes across Odoo versions -->
+        <record id="module_category_purchase_lot" model="ir.module.category">
+            <field name="name">Purchase Lot Management</field>
+            <field name="description">Category for Purchase Lot Expiry management privileges.</field>
+            <field name="sequence">20</field>
+        </record>
+
+        <!-- Define group with implied base.group_user -->
+        <record id="group_purchase_mass_create_lot" model="res.groups">
+            <field name="name">Mass Create Lot Numbers</field>
+            <field name="category_id" ref="module_category_purchase_lot"/>
+            <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+            <field name="comment">Allows user to mass generate lot and serial numbers directly on Purchase Orders.</field>
+        </record>
+    </data>
+</odoo>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Inherit Stock Lot Form View to show Auto-Generated Sequence -->
+    <record id="view_production_lot_form_inherit_auto_seq" model="ir.ui.view">
+        <field name="name">stock.lot.form.inherit.auto.seq</field>
+        <field name="model">stock.lot</field>
+        <field name="inherit_id" ref="stock.view_production_lot_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='ref']" position="after">
+                <field name="auto_generated_sequence" readonly="1" invisible="not auto_generated_sequence"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

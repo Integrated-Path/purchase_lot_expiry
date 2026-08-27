@@ -25,11 +25,13 @@ Key Features:
         'product_expiry',
     ],
     'data': [
+        'security/purchase_lot_security.xml',
         'security/ir.model.access.csv',
         'wizard/purchase_lot_redistribute_wizard_views.xml',
         'views/purchase_order_views.xml',
         'views/stock_picking_views.xml',
         'views/account_move_views.xml',
+        'views/stock_lot_views.xml',
     ],
     'installable': True,
     'application': False,

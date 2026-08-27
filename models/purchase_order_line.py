@@ -243,3 +243,80 @@ class PurchaseOrderLine(models.Model):
         if self.lot_ids:
             res['lot_ids'] = [(6, 0, self.lot_ids.ids)]
         return res
+
+
+class PurchaseOrder(models.Model):
+    _inherit = 'purchase.order'
+
+    def action_mass_create_lots(self):
+        """
+        Mass generate Lot and Serial numbers for Purchase Order Lines.
+        Rules:
+        - Only for lines where product tracking is 'lot' or 'serial'.
+        - Option A: Skip lines that already have assigned lots (line.lot_ids is not empty).
+        - Sequence Format:
+            Lot: "PO00015-LN001-AUTO GENERATED"
+            Serial: "PO00015-SN001-AUTO GENERATED"
+        - Collision Bypass:
+            Check stock.lot and purchase.lot.sequence for duplicates.
+            If collision found, increment sequence number by 1 ("bypass by 1").
+        - Store generated sequence in purchase.lot.sequence.
+        - Store original sequence string on stock.lot.auto_generated_sequence.
+        """
+        for order in self:
+            po_name = order.name or f"PO{order.id}"
+            lines_to_process = order.order_line.filtered(
+                lambda l: l.product_tracking in ('lot', 'serial') and not l.lot_ids
+            )
+            if not lines_to_process:
+                continue
+
+            for line in lines_to_process:
+                tracking = line.product_tracking
+                prefix = "LN" if tracking == "lot" else "SN"
+
+                if tracking == "lot":
+                    qty_to_generate = 1
+                else:
+                    qty_to_generate = int(line.product_qty) if line.product_qty > 0 else 1
+
+                created_lots = self.env['stock.lot']
+                for _ in range(qty_to_generate):
+                    seq_num = 1
+                    while True:
+                        candidate_name = f"{po_name}-{prefix}{seq_num:03d}-AUTO GENERATED"
+
+                        existing_lot = self.env['stock.lot'].search([
+                            ('name', '=', candidate_name)
+                        ], limit=1)
+                        existing_seq = self.env['purchase.lot.sequence'].search([
+                            ('name', '=', candidate_name)
+                        ], limit=1)
+
+                        if not existing_lot and not existing_seq:
+                            break
+                        seq_num += 1
+
+                    self.env['purchase.lot.sequence'].create({
+                        'name': candidate_name,
+                        'purchase_id': order.id,
+                        'purchase_line_id': line.id,
+                        'product_id': line.product_id.id,
+                        'tracking_type': tracking,
+                        'sequence_number': seq_num,
+                        'company_id': order.company_id.id,
+                    })
+
+                    lot = self.env['stock.lot'].create({
+                        'name': candidate_name,
+                        'product_id': line.product_id.id,
+                        'company_id': order.company_id.id,
+                        'expiration_date': line.expiration_date,
+                        'auto_generated_sequence': candidate_name,
+                    })
+                    created_lots |= lot
+
+                line.write({'lot_ids': [(6, 0, created_lots.ids)]})
+                line._sync_pol_lot_ids_default()
+                line._update_stock_move_lots()
+        return True

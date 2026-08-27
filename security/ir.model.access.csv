@@ -2,3 +2,4 @@ id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_purchase_order_line_lot,purchase.order.line.lot,model_purchase_order_line_lot,base.group_user,1,1,1,1
 access_purchase_lot_redistribute_wizard,purchase.lot.redistribute.wizard,model_purchase_lot_redistribute_wizard,base.group_user,1,1,1,1
 access_purchase_lot_redistribute_wizard_line,purchase.lot.redistribute.wizard.line,model_purchase_lot_redistribute_wizard_line,base.group_user,1,1,1,1
+access_purchase_lot_sequence,purchase.lot.sequence,model_purchase_lot_sequence,base.group_user,1,1,1,1

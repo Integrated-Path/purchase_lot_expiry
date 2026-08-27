@@ -6,6 +6,11 @@
         <field name="model">purchase.order</field>
         <field name="inherit_id" ref="purchase.purchase_order_form"/>
         <field name="arch" type="xml">
+            <!-- Add Mass Create Lots button in PO header -->
+            <xpath expr="//header" position="inside">
+                <button name="action_mass_create_lots" type="object" string="Mass Create Lots" class="btn-primary" groups="purchase_lot_expiry.group_purchase_mass_create_lot" invisible="state not in ('draft', 'sent', 'to approve', 'purchase')"/>
+            </xpath>
+
             <!-- Add Lot, Expiry fields, and Redistribute Button in Order Line list view -->
             <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="after">
                 <field name="product_tracking" column_invisible="True"/>
