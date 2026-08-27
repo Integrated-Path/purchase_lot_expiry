@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo import models, fields, api
 from odoo.exceptions import UserError
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class PurchaseOrderLineLot(models.Model):
@@ -226,13 +226,6 @@ class PurchaseOrderLine(models.Model):
                         if move_lines_vals:
                             self.env['stock.move.line'].create(move_lines_vals)
 
-    def _prepare_stock_moves(self, picking):
-        res = super(PurchaseOrderLine, self)._prepare_stock_moves(picking)
-        for vals in res:
-            if self.lot_ids:
-                vals['lot_ids'] = [(6, 0, self.lot_ids.ids)]
-        return res
-
     def _create_stock_moves(self, picking):
         moves = super(PurchaseOrderLine, self)._create_stock_moves(picking)
         self._update_stock_move_lots()
@@ -257,6 +250,8 @@ class PurchaseOrder(models.Model):
         - Sequence Format:
             Lot: "PO00015-LN001-AUTO GENERATED"
             Serial: "PO00015-SN001-AUTO GENERATED"
+        - Expiration Calculation:
+            If expiration_date is empty on PO line, automatically calculate it using product rules (e.g. 90 days).
         - Collision Bypass:
             Check stock.lot and purchase.lot.sequence for duplicates.
             If collision found, increment sequence number by 1 ("bypass by 1").
@@ -274,6 +269,16 @@ class PurchaseOrder(models.Model):
             for line in lines_to_process:
                 tracking = line.product_tracking
                 prefix = "LN" if tracking == "lot" else "SN"
+
+                # Automatically calculate expiration date from product rules if empty
+                expiration_date = line.expiration_date
+                if not expiration_date and line.product_id:
+                    product = line.product_id
+                    use_exp = getattr(product, 'use_expiration_date', False) or getattr(product.product_tmpl_id, 'use_expiration_date', False)
+                    exp_time = getattr(product, 'expiration_time', 0) or getattr(product.product_tmpl_id, 'expiration_time', 0)
+                    if use_exp and exp_time > 0:
+                        expiration_date = fields.Datetime.now() + timedelta(days=exp_time)
+                        line.write({'expiration_date': expiration_date})
 
                 if tracking == "lot":
                     qty_to_generate = 1
@@ -311,7 +316,7 @@ class PurchaseOrder(models.Model):
                         'name': candidate_name,
                         'product_id': line.product_id.id,
                         'company_id': order.company_id.id,
-                        'expiration_date': line.expiration_date,
+                        'expiration_date': expiration_date,
                         'auto_generated_sequence': candidate_name,
                     })
                     created_lots |= lot
