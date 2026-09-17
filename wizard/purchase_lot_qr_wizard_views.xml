@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_purchase_lot_qr_wizard_form" model="ir.ui.view">
+        <field name="name">purchase.lot.qr.wizard.form</field>
+        <field name="model">purchase.lot.qr.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Print Lot / Serial QR Labels">
+                <sheet>
+                    <group>
+                        <group string="Label Settings">
+                            <field name="layout_type" widget="radio"/>
+                            <field name="payload_format"/>
+                        </group>
+                        <group string="Print Summary">
+                            <field name="purchase_id" invisible="not purchase_id"/>
+                            <field name="picking_id" invisible="not picking_id"/>
+                            <field name="total_labels_to_print" class="oe_bold"/>
+                        </group>
+                    </group>
+                    <div class="mb-2">
+                        <button name="action_select_all" type="object" string="Select All" class="btn btn-sm btn-secondary me-2" icon="fa-check-square-o"/>
+                        <button name="action_unselect_all" type="object" string="Unselect All" class="btn btn-sm btn-secondary" icon="fa-square-o"/>
+                    </div>
+                    <notebook>
+                        <page string="Lot Lines to Print">
+                            <field name="line_ids">
+                                <list editable="bottom">
+                                    <field name="is_selected" widget="boolean_toggle"/>
+                                    <field name="product_id" readonly="1"/>
+                                    <field name="product_barcode" optional="show" readonly="1"/>
+                                    <field name="lot_name" readonly="1"/>
+                                    <field name="expiration_date" readonly="1"/>
+                                    <field name="quantity" readonly="1"/>
+                                    <field name="uom_id" readonly="1"/>
+                                    <field name="copies"/>
+                                    <field name="qr_code_value" optional="hide" readonly="1"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <footer>
+                    <button name="action_print" string="Print QR Labels" type="object" class="btn-primary" icon="fa-print" data-hotkey="q"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel" data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action Window for Purchase Order Lot QR Labels -->
+    <record id="action_purchase_lot_qr_wizard" model="ir.actions.act_window">
+        <field name="name">Print Lot QR Labels</field>
+        <field name="res_model">purchase.lot.qr.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

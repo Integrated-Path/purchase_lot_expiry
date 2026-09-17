@@ -2,3 +2,7 @@ id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_purchase_order_line_lot,purchase.order.line.lot,model_purchase_order_line_lot,base.group_user,1,1,1,1
 access_purchase_lot_redistribute_wizard,purchase.lot.redistribute.wizard,model_purchase_lot_redistribute_wizard,base.group_user,1,1,1,1
 access_purchase_lot_redistribute_wizard_line,purchase.lot.redistribute.wizard.line,model_purchase_lot_redistribute_wizard_line,base.group_user,1,1,1,1
+access_purchase_lot_qr_wizard,purchase.lot.qr.wizard,model_purchase_lot_qr_wizard,base.group_user,1,1,1,1
+access_purchase_lot_qr_wizard_line,purchase.lot.qr.wizard.line,model_purchase_lot_qr_wizard_line,base.group_user,1,1,1,1
+access_stock_picking_qr_scan_wizard,stock.picking.qr.scan.wizard,model_stock_picking_qr_scan_wizard,base.group_user,1,1,1,1
+access_stock_picking_qr_scan_wizard_line,stock.picking.qr.scan.wizard.line,model_stock_picking_qr_scan_wizard_line,base.group_user,1,1,1,1

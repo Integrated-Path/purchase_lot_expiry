@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields, api
+from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 from datetime import datetime
 
@@ -30,6 +30,55 @@ class PurchaseOrderLineLot(models.Model):
         related='lot_id.expiration_date',
         readonly=False
     )
+
+
+class PurchaseOrder(models.Model):
+    _inherit = 'purchase.order'
+
+    def action_open_lot_qr_wizard(self):
+        self.ensure_one()
+        wizard_lines = []
+        for line in self.order_line.filtered(lambda l: l.lot_ids):
+            if line.pol_lot_ids:
+                for pol_lot in line.pol_lot_ids:
+                    wizard_lines.append((0, 0, {
+                        'product_id': line.product_id.id,
+                        'lot_id': pol_lot.lot_id.id,
+                        'lot_name': pol_lot.lot_id.name,
+                        'expiration_date': pol_lot.lot_id.expiration_date or pol_lot.expiration_date,
+                        'quantity': pol_lot.quantity,
+                        'copies': 1,
+                        'is_selected': True,
+                    }))
+            else:
+                nb = len(line.lot_ids)
+                qty = line.product_qty / nb if nb > 0 else 1.0
+                for lot in line.lot_ids:
+                    wizard_lines.append((0, 0, {
+                        'product_id': line.product_id.id,
+                        'lot_id': lot.id,
+                        'lot_name': lot.name,
+                        'expiration_date': lot.expiration_date or line.expiration_date,
+                        'quantity': qty,
+                        'copies': 1,
+                        'is_selected': True,
+                    }))
+
+        if not wizard_lines:
+            raise UserError(_("No Lot/Serial numbers found on this purchase order to generate labels."))
+
+        wizard = self.env['purchase.lot.qr.wizard'].create({
+            'purchase_id': self.id,
+            'line_ids': wizard_lines,
+        })
+        return {
+            'name': _('Print Lot/Serial QR Labels'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'purchase.lot.qr.wizard',
+            'res_id': wizard.id,
+            'view_mode': 'form',
+            'target': 'new',
+        }
 
 
 class PurchaseOrderLine(models.Model):
@@ -119,14 +168,11 @@ class PurchaseOrderLine(models.Model):
                 line.pol_lot_ids = [(5, 0, 0)]
                 continue
             existing_lots = line.pol_lot_ids.mapped('lot_id')
-            lines_to_remove = line.pol_lot_ids.filtered(lambda l: l.lot_id not in line.lot_ids)
-            commands = [(2, l.id) for l in lines_to_remove if l.id]
-
             new_lots = line.lot_ids - existing_lots
             if new_lots or len(line.lot_ids) != len(line.pol_lot_ids):
                 nb_lots = len(line.lot_ids)
                 default_qty = line.product_qty / nb_lots if nb_lots > 0 else 0.0
-                commands.append((5, 0, 0))
+                commands = [(5, 0, 0)]
                 for lot in line.lot_ids:
                     commands.append((0, 0, {
                         'lot_id': lot.id,
@@ -137,8 +183,11 @@ class PurchaseOrderLine(models.Model):
     def action_open_lot_redistribution_wizard(self):
         self.ensure_one()
         if len(self.lot_ids) < 2:
-            raise UserError("Redistribution requires at least 2 assigned lots/serial numbers.")
+            raise UserError(_("Redistribution requires at least 2 assigned lots/serial numbers."))
         
+        # Check safety guard before opening
+        self._check_modification_safety({'pol_lot_ids': True})
+
         self._sync_pol_lot_ids_default()
 
         wizard_lines = []
@@ -155,13 +204,19 @@ class PurchaseOrderLine(models.Model):
         })
 
         return {
-            'name': 'Redistribute Lot Quantities',
+            'name': _('Redistribute Lot Quantities'),
             'type': 'ir.actions.act_window',
             'res_model': 'purchase.lot.redistribute.wizard',
             'res_id': wizard.id,
             'view_mode': 'form',
             'target': 'new',
         }
+
+    def action_open_lot_qr_wizard(self):
+        self.ensure_one()
+        if not self.lot_ids:
+            raise UserError(_("No Lot/Serial numbers assigned to this purchase order line."))
+        return self.order_id.action_open_lot_qr_wizard()
 
     def _sync_pol_lot_ids_default(self):
         """ Helper to sync pol_lot_ids synchronously if changed in backend code """
@@ -187,9 +242,41 @@ class PurchaseOrderLine(models.Model):
                         'quantity': default_qty,
                     })
 
+    def _check_modification_safety(self, vals):
+        """ Prevent modifying lots, quantities, or expiries if linked pickings are done or vendor bills posted """
+        critical_fields = {'lot_ids', 'expiration_date', 'product_qty', 'pol_lot_ids'}
+        if not (critical_fields & set(vals.keys())):
+            return
+
+        for line in self:
+            if line.order_id.state in ('purchase', 'done'):
+                # Check for done pickings
+                done_pickings = line.move_ids.mapped('picking_id').filtered(lambda p: p.state == 'done')
+                if done_pickings:
+                    picking_names = ", ".join(done_pickings.mapped('name'))
+                    raise UserError(
+                        _("Cannot modify Lot/Serial numbers, quantities, or expiration dates on PO line for '%(product)s' "
+                          "because linked receipt(s) (%(pickings)s) have already been processed and marked as Done. "
+                          "Please process returns or scrap adjustments instead.")
+                        % {'product': line.product_id.display_name, 'pickings': picking_names}
+                    )
+                
+                # Check for posted vendor bills
+                posted_bills = line.invoice_lines.mapped('move_id').filtered(lambda m: m.state == 'posted')
+                if posted_bills:
+                    bill_names = ", ".join(posted_bills.mapped('name'))
+                    raise UserError(
+                        _("Cannot modify Lot/Serial numbers, quantities, or expiration dates on PO line for '%(product)s' "
+                          "because linked vendor bill(s) (%(bills)s) are already posted. "
+                          "Please create a credit note or adjust the bill first.")
+                        % {'product': line.product_id.display_name, 'bills': bill_names}
+                    )
+
     def write(self, vals):
+        self._check_modification_safety(vals)
         res = super(PurchaseOrderLine, self).write(vals)
-        if 'expiration_date' in vals or 'lot_ids' in vals:
+        sync_needed_fields = {'expiration_date', 'lot_ids', 'product_qty', 'pol_lot_ids'}
+        if sync_needed_fields & set(vals.keys()):
             for line in self:
                 if line.expiration_date and line.lot_ids:
                     lots_to_update = line.lot_ids.filtered(
@@ -199,7 +286,26 @@ class PurchaseOrderLine(models.Model):
                         lots_to_update.write({'expiration_date': line.expiration_date})
                 line._sync_pol_lot_ids_default()
                 line._update_stock_move_lots()
+                line._update_draft_vendor_bills()
         return res
+
+    def unlink(self):
+        for line in self:
+            if line.order_id.state in ('purchase', 'done'):
+                done_pickings = line.move_ids.mapped('picking_id').filtered(lambda p: p.state == 'done')
+                if done_pickings:
+                    raise UserError(
+                        _("Cannot delete PO line for '%(product)s' because linked receipt(s) have already been processed.")
+                        % {'product': line.product_id.display_name}
+                    )
+        return super(PurchaseOrderLine, self).unlink()
+
+    def _update_draft_vendor_bills(self):
+        """ Propagate lot changes to linked draft vendor bill lines """
+        for line in self:
+            draft_bill_lines = line.invoice_lines.filtered(lambda l: l.move_id.state == 'draft')
+            if draft_bill_lines:
+                draft_bill_lines.write({'lot_ids': [(6, 0, line.lot_ids.ids)]})
 
     def _update_stock_move_lots(self):
         """ Update stock.move and stock.move.line for stock pickings linked to this line """
@@ -207,10 +313,13 @@ class PurchaseOrderLine(models.Model):
             if not line.move_ids:
                 continue
             for move in line.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
-                if line.lot_ids:
+                if not line.lot_ids:
+                    move.lot_ids = [(5, 0, 0)]
+                    move.move_line_ids.unlink()
+                else:
                     move.lot_ids = [(6, 0, line.lot_ids.ids)]
+                    move.move_line_ids.unlink()
                     if line.pol_lot_ids:
-                        move.move_line_ids.unlink()
                         move_lines_vals = []
                         for pol_lot in line.pol_lot_ids:
                             move_lines_vals.append({
@@ -223,6 +332,21 @@ class PurchaseOrderLine(models.Model):
                                 'lot_id': pol_lot.lot_id.id,
                                 'quantity': pol_lot.quantity,
                             })
+                        if move_lines_vals:
+                            self.env['stock.move.line'].create(move_lines_vals)
+                    else:
+                        nb_lots = len(line.lot_ids)
+                        qty_per_lot = move.product_uom_qty / nb_lots if nb_lots > 0 else 0.0
+                        move_lines_vals = [{
+                            'move_id': move.id,
+                            'picking_id': move.picking_id.id if move.picking_id else False,
+                            'product_id': move.product_id.id,
+                            'product_uom_id': move.product_uom.id,
+                            'location_id': move.location_id.id,
+                            'location_dest_id': move.location_dest_id.id,
+                            'lot_id': lot.id,
+                            'quantity': qty_per_lot,
+                        } for lot in line.lot_ids]
                         if move_lines_vals:
                             self.env['stock.move.line'].create(move_lines_vals)
 

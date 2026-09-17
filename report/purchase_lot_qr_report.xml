@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Paperformat for Thermal 50x30mm Roll -->
+    <record id="paperformat_thermal_50x30" model="report.paperformat">
+        <field name="name">Thermal Roll 50x30mm</field>
+        <field name="default" eval="False"/>
+        <field name="format">custom</field>
+        <field name="page_height">30</field>
+        <field name="page_width">50</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">1</field>
+        <field name="margin_bottom">1</field>
+        <field name="margin_left">1</field>
+        <field name="margin_right">1</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">96</field>
+    </record>
+
+    <!-- Paperformat for Thermal 40x20mm Roll -->
+    <record id="paperformat_thermal_40x20" model="report.paperformat">
+        <field name="name">Thermal Roll 40x20mm</field>
+        <field name="default" eval="False"/>
+        <field name="format">custom</field>
+        <field name="page_height">20</field>
+        <field name="page_width">40</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">1</field>
+        <field name="margin_bottom">1</field>
+        <field name="margin_left">1</field>
+        <field name="margin_right">1</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">96</field>
+    </record>
+
+    <!-- Report Action -->
+    <record id="action_report_lot_qr_labels" model="ir.actions.report">
+        <field name="name">Lot/Serial QR Labels</field>
+        <field name="model">purchase.lot.qr.wizard</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">purchase_lot_expiry.report_lot_qr_labels</field>
+        <field name="report_file">purchase_lot_expiry.report_lot_qr_labels</field>
+        <field name="print_report_name">'Lot_QR_Labels_%s' % (object.picking_id.name or object.purchase_id.name or 'Print')</field>
+        <field name="paperformat_id" ref="paperformat_thermal_50x30"/>
+        <field name="binding_type">report</field>
+    </record>
+</odoo>

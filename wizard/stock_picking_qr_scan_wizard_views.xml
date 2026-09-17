@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_stock_picking_qr_scan_wizard_form" model="ir.ui.view">
+        <field name="name">stock.picking.qr.scan.wizard.form</field>
+        <field name="model">stock.picking.qr.scan.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Warehouse QR Receipt Scanner">
+                <sheet>
+                    <div class="alert alert-success" role="alert" invisible="not is_all_fulfilled">
+                        <strong>All items fulfilled!</strong> You can now validate this receipt directly.
+                    </div>
+
+                    <div t-attf-class="alert alert-#{scan_status_type == 'danger' and 'danger' or (scan_status_type == 'success' and 'success' or 'info')}" role="alert">
+                        <field name="scan_status_message" readonly="1"/>
+                    </div>
+
+                    <group>
+                        <group>
+                            <field name="picking_name" readonly="1" class="fw-bold"/>
+                            <field name="partner_id" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="total_demand" readonly="1"/>
+                            <field name="total_done" readonly="1" class="fw-bold text-success"/>
+                            <field name="is_all_fulfilled" invisible="1"/>
+                        </group>
+                    </group>
+
+                    <!-- Scan Input Bar -->
+                    <div class="card p-3 mb-3 bg-light border-primary">
+                        <label for="scan_input" string="Scan Lot / Product QR Code" class="fw-bold fs-5 text-primary mb-2"/>
+                        <div class="input-group">
+                            <field name="scan_input" placeholder="Point scanner and scan QR code here..." default_focus="1" class="form-control form-control-lg"/>
+                            <button name="action_process_scan" type="object" string="Process Scan" class="btn btn-primary btn-lg" icon="fa-barcode" data-hotkey="s"/>
+                        </div>
+                        <small class="text-muted mt-1">
+                            Supports JSON QR codes, Pipe-delimited (PROD|LOT|EXP|QTY), GS1-128, or direct Lot/Barcode scans.
+                        </small>
+                    </div>
+
+                    <notebook>
+                        <page string="Receipt Progress">
+                            <field name="line_ids">
+                                <list decoration-success="is_fulfilled" decoration-info="not is_fulfilled and done_qty &gt; 0">
+                                    <field name="product_id" readonly="1"/>
+                                    <field name="product_barcode" optional="show" readonly="1"/>
+                                    <field name="lot_names_display" widget="badge" decoration-info="1" readonly="1"/>
+                                    <field name="demand_qty" readonly="1"/>
+                                    <field name="done_qty" readonly="1" class="fw-bold"/>
+                                    <field name="uom_id" readonly="1"/>
+                                    <field name="is_fulfilled" widget="boolean_toggle" readonly="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Scan Activity Log">
+                            <field name="scan_log" widget="text" readonly="1" placeholder="Scan activity will appear here..."/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <footer>
+                    <button name="action_validate_picking" string="Validate Receipt" type="object" class="btn-success" icon="fa-check" invisible="not is_all_fulfilled" data-hotkey="v"/>
+                    <button string="Close Scanner" class="btn-secondary" special="cancel" data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_stock_picking_qr_scan_wizard" model="ir.actions.act_window">
+        <field name="name">Warehouse QR Scanner</field>
+        <field name="res_model">stock.picking.qr.scan.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

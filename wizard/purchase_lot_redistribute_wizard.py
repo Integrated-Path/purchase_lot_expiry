@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import models, fields, api
+from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 from odoo.tools import float_compare
 
@@ -70,13 +70,24 @@ class PurchaseLotRedistributeWizard(models.TransientModel):
 
     def action_confirm(self):
         self.ensure_one()
+        line = self.purchase_line_id
+
+        # Safety Guard: Check if linked picking is done or bill is posted
+        line._check_modification_safety({'pol_lot_ids': True, 'lot_ids': True})
+
         precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
         if float_compare(self.total_allocated_qty, self.product_qty, precision_digits=precision) != 0:
             raise UserError(
-                f"Total allocated quantity ({self.total_allocated_qty}) must equal total order quantity ({self.product_qty})."
+                _("Total allocated quantity (%(allocated)s) must equal total order quantity (%(order_qty)s).")
+                % {'allocated': self.total_allocated_qty, 'order_qty': self.product_qty}
             )
 
-        line = self.purchase_line_id
+        wizard_lots = self.line_ids.mapped('lot_id')
+        wizard_lot_ids = set(wizard_lots.ids)
+
+        # Update lot_ids on the purchase order line to reflect wizard selections
+        line.lot_ids = [(6, 0, list(wizard_lot_ids))]
+
         pol_lot_env = self.env['purchase.order.line.lot']
         existing_pol_lots = {l.lot_id.id: l for l in line.pol_lot_ids}
 
@@ -93,12 +104,12 @@ class PurchaseLotRedistributeWizard(models.TransientModel):
                     'quantity': w_line.quantity,
                 })
 
-        wizard_lot_ids = set(self.line_ids.mapped('lot_id').ids)
         for lot_id, pol_lot in list(existing_pol_lots.items()):
             if lot_id not in wizard_lot_ids:
                 pol_lot.unlink()
 
         line._update_stock_move_lots()
+        line._update_draft_vendor_bills()
         return {'type': 'ir.actions.act_window_close'}
 
 

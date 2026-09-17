@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Inherit Purchase Order Form View to add Lot and Expiry fields to Order Lines -->
+    <!-- Inherit Purchase Order Form View to add Lot and Expiry fields to Order Lines and Print QR Labels button -->
     <record id="purchase_order_form_inherit_lot_expiry" model="ir.ui.view">
         <field name="name">purchase.order.form.inherit.lot.expiry</field>
         <field name="model">purchase.order</field>
         <field name="inherit_id" ref="purchase.purchase_order_form"/>
         <field name="arch" type="xml">
+            <!-- Header Print Lot QR Labels Button -->
+            <xpath expr="//header" position="inside">
+                <button name="action_open_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode"/>
+            </xpath>
+
             <!-- Add Lot, Expiry fields, and Redistribute Button in Order Line list view -->
             <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="after">
                 <field name="product_tracking" column_invisible="True"/>

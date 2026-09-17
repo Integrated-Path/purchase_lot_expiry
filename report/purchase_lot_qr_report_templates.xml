@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="report_lot_qr_labels">
+        <t t-call="web.basic_layout">
+            <t t-foreach="docs" t-as="wizard">
+                <!-- 1. Thermal 50x30mm Format -->
+                <t t-if="wizard.layout_type == 'thermal_50x30'">
+                    <style>
+                        body {
+                            margin: 0;
+                            padding: 0;
+                            font-family: Arial, Helvetica, sans-serif;
+                        }
+                        .page-thermal-50x30 {
+                            width: 48mm;
+                            height: 28mm;
+                            page-break-after: always;
+                            page-break-inside: avoid;
+                            overflow: hidden;
+                            box-sizing: border-box;
+                        }
+                        .tbl-50x30 {
+                            width: 100%;
+                            height: 28mm;
+                            border-collapse: collapse;
+                            table-layout: fixed;
+                        }
+                        .tbl-50x30 td {
+                            vertical-align: middle;
+                            padding: 0;
+                        }
+                        .col-qr-50x30 {
+                            width: 22mm;
+                            text-align: center;
+                        }
+                        .col-qr-50x30 img {
+                            width: 21mm;
+                            height: 21mm;
+                            display: block;
+                            margin: 0 auto;
+                        }
+                        .col-info-50x30 {
+                            width: 26mm;
+                            padding-left: 2mm !important;
+                            font-size: 6.5pt;
+                            line-height: 1.15;
+                            color: #000;
+                            overflow: hidden;
+                        }
+                        .prod-name-50 {
+                            font-weight: bold;
+                            font-size: 7pt;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            max-width: 25mm;
+                        }
+                        .sku-50 {
+                            font-size: 5.5pt;
+                            color: #555;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+                        .lot-50 {
+                            font-weight: bold;
+                            font-size: 7.5pt;
+                            color: #000;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                        }
+                        .exp-50 {
+                            font-weight: bold;
+                            font-size: 6.5pt;
+                            color: #b00;
+                        }
+                        .qty-50 {
+                            font-size: 6pt;
+                            color: #333;
+                        }
+                    </style>
+
+                    <t t-foreach="wizard.line_ids.filtered(lambda l: l.is_selected and l.copies > 0)" t-as="line">
+                        <t t-foreach="range(line.copies)" t-as="copy_idx">
+                            <div class="page-thermal-50x30">
+                                <table class="tbl-50x30">
+                                    <tr>
+                                        <td class="col-qr-50x30">
+                                            <img t-att-src="'/report/barcode/?barcode_type=QR&amp;value=%s' % line.qr_code_value" alt="QR Code"/>
+                                        </td>
+                                        <td class="col-info-50x30">
+                                            <div class="prod-name-50" t-att-title="line.product_id.display_name">
+                                                <t t-out="line.product_id.name"/>
+                                            </div>
+                                            <div class="sku-50" t-if="line.product_code or line.product_barcode">
+                                                <t t-out="line.product_code or line.product_barcode"/>
+                                            </div>
+                                            <div class="lot-50">
+                                                LOT: <t t-out="line.lot_name"/>
+                                            </div>
+                                            <div class="exp-50" t-if="line.expiration_date">
+                                                EXP: <span t-field="line.expiration_date" t-options='{"widget": "date"}'/>
+                                            </div>
+                                            <div class="qty-50">
+                                                QTY: <t t-out="'%.1f' % line.quantity"/> <t t-out="line.uom_id.name or ''"/>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </t>
+                    </t>
+                </t>
+
+                <!-- 2. Thermal 40x20mm Format -->
+                <t t-elif="wizard.layout_type == 'thermal_40x20'">
+                    <style>
+                        body {
+                            margin: 0;
+                            padding: 0;
+                            font-family: Arial, Helvetica, sans-serif;
+                        }
+                        .page-thermal-40x20 {
+                            width: 38mm;
+                            height: 18mm;
+                            page-break-after: always;
+                            page-break-inside: avoid;
+                            overflow: hidden;
+                            box-sizing: border-box;
+                        }
+                        .tbl-40x20 {
+                            width: 100%;
+                            height: 18mm;
+                            border-collapse: collapse;
+                            table-layout: fixed;
+                        }
+                        .tbl-40x20 td {
+                            vertical-align: middle;
+                            padding: 0;
+                        }
+                        .col-qr-40x20 {
+                            width: 17mm;
+                            text-align: center;
+                        }
+                        .col-qr-40x20 img {
+                            width: 16mm;
+                            height: 16mm;
+                            display: block;
+                            margin: 0 auto;
+                        }
+                        .col-info-40x20 {
+                            width: 21mm;
+                            padding-left: 1mm !important;
+                            font-size: 5pt;
+                            line-height: 1.1;
+                            color: #000;
+                            overflow: hidden;
+                        }
+                        .prod-name-40 {
+                            font-weight: bold;
+                            font-size: 5.5pt;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            max-width: 20mm;
+                        }
+                        .lot-40 {
+                            font-weight: bold;
+                            font-size: 6pt;
+                            color: #000;
+                        }
+                        .exp-40 {
+                            font-weight: bold;
+                            font-size: 5.5pt;
+                            color: #b00;
+                        }
+                        .qty-40 {
+                            font-size: 5pt;
+                            color: #333;
+                        }
+                    </style>
+
+                    <t t-foreach="wizard.line_ids.filtered(lambda l: l.is_selected and l.copies > 0)" t-as="line">
+                        <t t-foreach="range(line.copies)" t-as="copy_idx">
+                            <div class="page-thermal-40x20">
+                                <table class="tbl-40x20">
+                                    <tr>
+                                        <td class="col-qr-40x20">
+                                            <img t-att-src="'/report/barcode/?barcode_type=QR&amp;value=%s' % line.qr_code_value" alt="QR Code"/>
+                                        </td>
+                                        <td class="col-info-40x20">
+                                            <div class="prod-name-40" t-att-title="line.product_id.display_name">
+                                                <t t-out="line.product_id.name"/>
+                                            </div>
+                                            <div class="lot-40">
+                                                L: <t t-out="line.lot_name"/>
+                                            </div>
+                                            <div class="exp-40" t-if="line.expiration_date">
+                                                E: <span t-field="line.expiration_date" t-options='{"widget": "date"}'/>
+                                            </div>
+                                            <div class="qty-40">
+                                                Q: <t t-out="'%.1f' % line.quantity"/>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </t>
+                    </t>
+                </t>
+
+                <!-- 3. Standard Avery 12-Sheet (3x4 Grid) Format -->
+                <t t-else="">
+                    <style>
+                        .avery-box {
+                            float: left;
+                            width: 31%;
+                            height: 62mm;
+                            margin: 1%;
+                            border: 1px dashed #bbb;
+                            border-radius: 4px;
+                            padding: 2.5mm;
+                            box-sizing: border-box;
+                            page-break-inside: avoid;
+                            font-family: Arial, Helvetica, sans-serif;
+                        }
+                        .avery-tbl {
+                            width: 100%;
+                            border-collapse: collapse;
+                        }
+                        .avery-tbl td {
+                            vertical-align: top;
+                        }
+                        .avery-qr {
+                            width: 25mm;
+                            height: 25mm;
+                        }
+                    </style>
+
+                    <div style="width: 100%; clear: both;">
+                        <t t-foreach="wizard.line_ids.filtered(lambda l: l.is_selected and l.copies > 0)" t-as="line">
+                            <t t-foreach="range(line.copies)" t-as="copy_idx">
+                                <div class="avery-box">
+                                    <table class="avery-tbl">
+                                        <tr>
+                                            <td style="width: 55%;">
+                                                <div style="font-weight: bold; font-size: 8.5pt; line-height: 1.2;">
+                                                    <t t-out="line.product_id.name"/>
+                                                </div>
+                                                <div style="font-size: 7pt; color: #555; margin-top: 1mm;" t-if="line.product_code">
+                                                    SKU: <t t-out="line.product_code"/>
+                                                </div>
+                                                <div style="font-size: 7pt; color: #555;" t-if="line.product_barcode">
+                                                    BC: <t t-out="line.product_barcode"/>
+                                                </div>
+                                            </td>
+                                            <td style="width: 45%; text-align: right;">
+                                                <img class="avery-qr" t-att-src="'/report/barcode/?barcode_type=QR&amp;value=%s' % line.qr_code_value" alt="QR Code"/>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                    <div style="margin-top: 3mm; font-size: 8pt; line-height: 1.3; border-top: 1px solid #eee; padding-top: 2mm;">
+                                        <div><strong>Lot/Serial:</strong> <span style="font-size: 9pt; font-weight: bold;"><t t-out="line.lot_name"/></span></div>
+                                        <div t-if="line.expiration_date" style="color: #c00;"><strong>Expiry Date:</strong> <span t-field="line.expiration_date" t-options='{"widget": "date"}'/></div>
+                                        <div><strong>Qty:</strong> <t t-out="'%.2f' % line.quantity"/> <t t-out="line.uom_id.name or ''"/></div>
+                                    </div>
+                                </div>
+                            </t>
+                        </t>
+                        <div style="clear: both;"/>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>
