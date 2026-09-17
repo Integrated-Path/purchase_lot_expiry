@@ -15,8 +15,7 @@ This module enables end-to-end management of Lot/Serial Numbers and Expiration D
 - Native QR Code label printing wizard with multiple layouts (Thermal rolls 50x30mm, 40x20mm, and Avery sheets).
 - Warehouse receipt QR code scanner with multi-format parsing (JSON, Delimited, GS1-128, plain Lot) and one-click receipt validation.
 """,
-    'author': 'Antigravity',
-    'website': 'https://www.odoo.com',
+    'author': 'Abdulaziz',
     'depends': [
         'purchase_stock',
         'account',
