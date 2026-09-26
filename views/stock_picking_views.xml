@@ -10,6 +10,7 @@
             <xpath expr="//header" position="inside">
                 <field name="picking_type_code" invisible="1"/>
                 <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan Receipt QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming'"/>
+                <button name="action_open_receipt_mobile_qr_scan_wizard" type="object" string="Scan via Mobile" class="btn btn-outline-primary" icon="fa-camera" groups="purchase_lot_expiry.group_mobile_qr_scan" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming'"/>
                 <button name="action_open_purchase_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="picking_type_code != 'incoming'"/>
             </xpath>
 

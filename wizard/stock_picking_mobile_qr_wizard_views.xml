@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_stock_picking_mobile_qr_wizard_form" model="ir.ui.view">
+        <field name="name">stock.picking.mobile.qr.wizard.form</field>
+        <field name="model">stock.picking.mobile.qr.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Mobile QR Receipt Scanner">
+                <sheet>
+                    <div class="row align-items-center mb-2 px-1">
+                        <div class="col-7">
+                            <h4 class="mb-0 fw-bold text-primary">
+                                <field name="picking_name" readonly="1"/>
+                            </h4>
+                            <small class="text-muted"><field name="partner_id" readonly="1"/></small>
+                        </div>
+                        <div class="col-5 text-end">
+                            <span class="fs-4 fw-bold text-success"><field name="total_done" readonly="1"/></span>
+                            <span class="text-muted fs-5"> / <field name="total_demand" readonly="1"/></span>
+                        </div>
+                    </div>
+
+                    <!-- Mobile Camera Scanner Widget -->
+                    <div class="mb-2">
+                        <widget name="mobile_qr_camera_scanner"/>
+                    </div>
+
+                    <!-- Progress and Scan Log -->
+                    <div class="card p-2 bg-light border-0 shadow-sm mb-2">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted small fw-bold"><i class="fa fa-history me-1"/> Recent Scans:</span>
+                            <field name="is_all_fulfilled" invisible="1"/>
+                        </div>
+                        <field name="scan_log" widget="text" readonly="1" class="font-monospace small mt-1" style="max-height: 110px; overflow-y: auto;" placeholder="Scan activity will appear here..."/>
+                    </div>
+
+                    <notebook>
+                        <page string="Receipt Progress">
+                            <field name="line_ids">
+                                <list decoration-success="is_fulfilled" decoration-info="not is_fulfilled and done_qty &gt; 0">
+                                    <field name="product_id"/>
+                                    <field name="lot_names_display" widget="badge" decoration-info="1"/>
+                                    <field name="demand_qty"/>
+                                    <field name="done_qty" class="fw-bold"/>
+                                    <field name="is_fulfilled" widget="boolean_toggle"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <footer>
+                    <button name="action_validate_transfer" string="Validate Receipt" type="object" class="btn btn-success btn-lg flex-fill" icon="fa-check" invisible="not is_all_fulfilled"/>
+                    <button string="Close Scanner" class="btn btn-secondary btn-lg flex-fill" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_stock_picking_mobile_qr_wizard" model="ir.actions.act_window">
+        <field name="name">Mobile QR Scanner</field>
+        <field name="res_model">stock.picking.mobile.qr.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

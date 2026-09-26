@@ -362,3 +362,26 @@ class StockPicking(models.Model):
         if self.picking_type_code == 'incoming' or not hasattr(super(), '_process_qr_payload'):
             return self._process_receipt_qr_payload(raw_string)
         return super()._process_qr_payload(raw_string)
+
+    def action_open_receipt_mobile_qr_scan_wizard(self):
+        """ Open dedicated mobile camera QR scanner for warehouse receipts """
+        self.ensure_one()
+        if self.state in ('done', 'cancel'):
+            raise UserError(_("Transfer '%s' is in state '%s' and cannot be processed.") % (self.name, self.state))
+        wizard = self.env['stock.picking.mobile.qr.wizard'].create({
+            'picking_id': self.id,
+        })
+        return {
+            'name': _('Mobile QR Scanner - %s') % self.name,
+            'type': 'ir.actions.act_window',
+            'res_model': 'stock.picking.mobile.qr.wizard',
+            'res_id': wizard.id,
+            'view_mode': 'form',
+            'target': 'new',
+        }
+
+    def action_open_mobile_qr_scan_wizard(self):
+        self.ensure_one()
+        if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_mobile_qr_scan_wizard'):
+            return self.action_open_receipt_mobile_qr_scan_wizard()
+        return super().action_open_mobile_qr_scan_wizard()

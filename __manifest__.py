@@ -23,12 +23,14 @@ This module enables end-to-end management of Lot/Serial Numbers and Expiration D
         'barcodes',
     ],
     'data': [
+        'security/security.xml',
         'security/ir.model.access.csv',
         'report/purchase_lot_qr_report.xml',
         'report/purchase_lot_qr_report_templates.xml',
         'wizard/purchase_lot_redistribute_wizard_views.xml',
         'wizard/purchase_lot_qr_wizard_views.xml',
         'wizard/stock_picking_qr_scan_wizard_views.xml',
+        'wizard/stock_picking_mobile_qr_wizard_views.xml',
         'views/purchase_order_views.xml',
         'views/stock_picking_views.xml',
         'views/account_move_views.xml',
@@ -36,4 +38,9 @@ This module enables end-to-end management of Lot/Serial Numbers and Expiration D
     'installable': True,
     'application': False,
     'license': 'LGPL-3',
+    'assets': {
+        'web.assets_backend': [
+            'purchase_lot_expiry/static/src/**/*',
+        ],
+    },
 }

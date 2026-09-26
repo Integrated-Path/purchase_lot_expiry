@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- 1. Category -->
+    <record id="module_category_mobile_qr" model="ir.module.category">
+        <field name="name">Inventory Mobile Operations</field>
+        <field name="sequence">30</field>
+        <field name="parent_id" ref="base.module_category_supply_chain"/>
+    </record>
+
+    <!-- 2. Privilege (Odoo 19) -->
+    <record id="res_groups_privilege_mobile_qr" model="res.groups.privilege">
+        <field name="name">Mobile Scanner</field>
+        <field name="category_id" ref="module_category_mobile_qr"/>
+        <field name="sequence">1</field>
+    </record>
+
+    <!-- 3. Security Group -->
+    <record id="group_mobile_qr_scan" model="res.groups">
+        <field name="name">Mobile QR Scanning Access</field>
+        <field name="privilege_id" ref="res_groups_privilege_mobile_qr"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+    </record>
+
+    <!-- Auto-grant to System Administrators -->
+    <record id="base.group_system" model="res.groups">
+        <field name="implied_ids" eval="[(4, ref('group_mobile_qr_scan'))]"/>
+    </record>
+</odoo>
