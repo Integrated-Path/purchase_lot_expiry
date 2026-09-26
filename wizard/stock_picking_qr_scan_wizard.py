@@ -103,7 +103,7 @@ class StockPickingQrScanWizard(models.TransientModel):
         raw_scan = self.scan_input.strip()
         self.scan_input = False
 
-        res = self.picking_id._process_qr_payload(raw_scan)
+        res = self.picking_id._process_receipt_qr_payload(raw_scan) if hasattr(self.picking_id, '_process_receipt_qr_payload') else self.picking_id._process_qr_payload(raw_scan)
 
         # Refresh progress lines
         self._populate_lines()

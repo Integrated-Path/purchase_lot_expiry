@@ -33,6 +33,8 @@ class AccountMoveLine(models.Model):
 
     @api.depends('purchase_line_id', 'purchase_line_id.lot_ids')
     def _compute_lot_ids(self):
+        if hasattr(super(), '_compute_lot_ids'):
+            super()._compute_lot_ids()
         for line in self:
             if not line.lot_ids and line.purchase_line_id and line.purchase_line_id.lot_ids:
                 line.lot_ids = [(6, 0, line.purchase_line_id.lot_ids.ids)]

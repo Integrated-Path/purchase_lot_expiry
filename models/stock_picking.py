@@ -19,8 +19,8 @@ class StockPicking(models.Model):
         copy=False
     )
 
-    def action_open_lot_qr_wizard(self):
-        """ Open QR Label generation wizard pre-filled with lots from this picking """
+    def action_open_purchase_lot_qr_wizard(self):
+        """ Open QR Label generation wizard pre-filled with lots from this purchase receipt """
         self.ensure_one()
         wizard_lines = []
         # First gather from stock.move.lines
@@ -67,7 +67,13 @@ class StockPicking(models.Model):
             'target': 'new',
         }
 
-    def action_open_qr_scan_wizard(self):
+    def action_open_lot_qr_wizard(self):
+        self.ensure_one()
+        if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_lot_qr_wizard'):
+            return self.action_open_purchase_lot_qr_wizard()
+        return super().action_open_lot_qr_wizard()
+
+    def action_open_receipt_qr_scan_wizard(self):
         """ Open dedicated warehouse receipt kiosk scanner wizard """
         self.ensure_one()
         if self.state in ('done', 'cancel'):
@@ -85,6 +91,12 @@ class StockPicking(models.Model):
             'view_mode': 'form',
             'target': 'new',
         }
+
+    def action_open_qr_scan_wizard(self):
+        self.ensure_one()
+        if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_qr_scan_wizard'):
+            return self.action_open_receipt_qr_scan_wizard()
+        return super().action_open_qr_scan_wizard()
 
     def action_process_qr_scan(self):
         """ Process scan from inline picking form view input """
@@ -176,7 +188,7 @@ class StockPicking(models.Model):
         data['lot_name'] = raw_string
         return data
 
-    def _process_qr_payload(self, raw_string):
+    def _process_receipt_qr_payload(self, raw_string):
         """ Resolves parsed QR payload and updates picking move lines """
         self.ensure_one()
         if self.state in ('done', 'cancel'):
@@ -344,3 +356,9 @@ class StockPicking(models.Model):
                 'sticky': False,
             }
         }
+
+    def _process_qr_payload(self, raw_string):
+        self.ensure_one()
+        if self.picking_type_code == 'incoming' or not hasattr(super(), '_process_qr_payload'):
+            return self._process_receipt_qr_payload(raw_string)
+        return super()._process_qr_payload(raw_string)

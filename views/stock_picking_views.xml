@@ -8,13 +8,15 @@
         <field name="arch" type="xml">
             <!-- Header Actions for Scanning and QR Labels -->
             <xpath expr="//header" position="inside">
-                <button name="action_open_qr_scan_wizard" type="object" string="Scan Receipt QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel')"/>
-                <button name="action_open_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode"/>
+                <field name="picking_type_code" invisible="1"/>
+                <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan Receipt QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming'"/>
+                <button name="action_open_purchase_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="picking_type_code != 'incoming'"/>
             </xpath>
 
             <!-- Inline Fast Scanner Bar above notebook -->
             <xpath expr="//notebook" position="before">
-                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="state in ('done', 'cancel')">
+                <field name="picking_type_code" invisible="1"/>
+                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming'">
                     <div class="row g-2 align-items-center">
                         <div class="col-auto">
                             <span class="badge bg-primary fs-6"><i class="fa fa-qrcode me-1"/> Fast QR Scan</span>
