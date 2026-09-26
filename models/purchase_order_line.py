@@ -32,55 +32,6 @@ class PurchaseOrderLineLot(models.Model):
     )
 
 
-class PurchaseOrder(models.Model):
-    _inherit = 'purchase.order'
-
-    def action_open_lot_qr_wizard(self):
-        self.ensure_one()
-        wizard_lines = []
-        for line in self.order_line.filtered(lambda l: l.lot_ids):
-            if line.pol_lot_ids:
-                for pol_lot in line.pol_lot_ids:
-                    wizard_lines.append((0, 0, {
-                        'product_id': line.product_id.id,
-                        'lot_id': pol_lot.lot_id.id,
-                        'lot_name': pol_lot.lot_id.name,
-                        'expiration_date': pol_lot.lot_id.expiration_date or pol_lot.expiration_date,
-                        'quantity': pol_lot.quantity,
-                        'copies': 1,
-                        'is_selected': True,
-                    }))
-            else:
-                nb = len(line.lot_ids)
-                qty = line.product_qty / nb if nb > 0 else 1.0
-                for lot in line.lot_ids:
-                    wizard_lines.append((0, 0, {
-                        'product_id': line.product_id.id,
-                        'lot_id': lot.id,
-                        'lot_name': lot.name,
-                        'expiration_date': lot.expiration_date or line.expiration_date,
-                        'quantity': qty,
-                        'copies': 1,
-                        'is_selected': True,
-                    }))
-
-        if not wizard_lines:
-            raise UserError(_("No Lot/Serial numbers found on this purchase order to generate labels."))
-
-        wizard = self.env['purchase.lot.qr.wizard'].create({
-            'purchase_id': self.id,
-            'line_ids': wizard_lines,
-        })
-        return {
-            'name': _('Print Lot/Serial QR Labels'),
-            'type': 'ir.actions.act_window',
-            'res_model': 'purchase.lot.qr.wizard',
-            'res_id': wizard.id,
-            'view_mode': 'form',
-            'target': 'new',
-        }
-
-
 class PurchaseOrderLine(models.Model):
     _inherit = 'purchase.order.line'
 

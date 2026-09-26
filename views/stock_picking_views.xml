@@ -1,23 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Inherit Stock Picking Form View to display QR buttons, scanning input, Lot Tags, and Expiry Badges -->
+    <!-- Inherit Stock Picking Form View to display QR buttons, scanning input, Lot Tags, Expiry Badges, and Clearance Locking -->
     <record id="view_picking_form_inherit_lot_expiry" model="ir.ui.view">
         <field name="name">stock.picking.form.inherit.lot.expiry</field>
         <field name="model">stock.picking</field>
         <field name="inherit_id" ref="stock.view_picking_form"/>
         <field name="arch" type="xml">
-            <!-- Header Actions for Scanning and QR Labels -->
+            <!-- Header Hidden Fields for Clearance Guard -->
             <xpath expr="//header" position="inside">
                 <field name="picking_type_code" invisible="1"/>
-                <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan Receipt QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming'"/>
-                <button name="action_open_receipt_mobile_qr_scan_wizard" type="object" string="Scan via Mobile" class="btn btn-outline-primary" icon="fa-camera" groups="purchase_lot_expiry.group_mobile_qr_scan" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming'"/>
+                <field name="purchase_id" invisible="1"/>
+                <field name="purchase_logistics_stage" invisible="1"/>
+                <field name="is_receipt_locked_for_clearance" invisible="1"/>
+                <!-- Scanning and QR Labels Buttons -->
+                <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan Receipt QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance"/>
+                <button name="action_open_receipt_mobile_qr_scan_wizard" type="object" string="Scan via Mobile" class="btn btn-outline-primary" icon="fa-camera" groups="purchase_lot_expiry.group_mobile_qr_scan" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance"/>
                 <button name="action_open_purchase_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="picking_type_code != 'incoming'"/>
             </xpath>
 
-            <!-- Inline Fast Scanner Bar above notebook -->
+            <!-- Guard Standard Validate Buttons when Receipt is Locked for Clearance -->
+            <xpath expr="//button[@name='button_validate'][1]" position="attributes">
+                <attribute name="invisible">state in ('draft', 'confirmed', 'done', 'cancel') or is_receipt_locked_for_clearance</attribute>
+            </xpath>
+            <xpath expr="//button[@name='button_validate'][2]" position="attributes">
+                <attribute name="invisible">state in ('waiting', 'assigned', 'done', 'cancel') or is_receipt_locked_for_clearance</attribute>
+            </xpath>
+
+            <!-- Informative Status Banners and Inline Fast Scanner Bar above notebook -->
             <xpath expr="//notebook" position="before">
-                <field name="picking_type_code" invisible="1"/>
-                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming'">
+                <!-- Warning Banner: View-Only until Clearance -->
+                <div class="alert alert-warning d-flex align-items-center mb-3 shadow-sm" role="alert" invisible="not is_receipt_locked_for_clearance">
+                    <i class="fa fa-lock fa-2x me-3 text-warning"/>
+                    <div>
+                        <h5 class="alert-heading mb-1 fw-bold">الشحنة للعرض فقط في المخازن (عرض فقط)</h5>
+                        <span>هذه الشحنة مرتبطة بأمر شراء في مرحلة: <field name="purchase_logistics_stage" class="fw-bold text-dark"/>.<br/>
+                        لا يمكن استلام أو مسح المواد في المخازن إلا بعد وصول أمر الشراء إلى مرحلة <b>التخليص (Clearance)</b>.</span>
+                    </div>
+                </div>
+
+                <!-- Success Banner: Clearance Stage Unlocked for Receiving -->
+                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="alert" invisible="state in ('done', 'cancel') or not purchase_id or purchase_logistics_stage != 'clearance'">
+                    <i class="fa fa-unlock-alt fa-2x me-3 text-success"/>
+                    <div>
+                        <h5 class="alert-heading mb-1 fw-bold">متاح للاستلام المخزني</h5>
+                        <span>وصلت الشحنة إلى مرحلة <b>التخليص (Clearance)</b>. يمكن الآن للمخازن استلام ومسح المواد واعتماد إذن الاستلام.</span>
+                    </div>
+                </div>
+
+                <!-- Inline Fast Scanner Bar -->
+                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance">
                     <div class="row g-2 align-items-center">
                         <div class="col-auto">
                             <span class="badge bg-primary fs-6"><i class="fa fa-qrcode me-1"/> Fast QR Scan</span>
@@ -46,6 +77,18 @@
             </xpath>
             <xpath expr="//field[@name='move_ids']/list//field[@name='lot_ids']" position="after">
                 <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Stock Picking List View (Receipts) to display Order Logistics Stage -->
+    <record id="vpicktree_inherit_logistics_stage" model="ir.ui.view">
+        <field name="name">stock.picking.list.inherit.logistics.stage</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.vpicktree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='state']" position="before">
+                <field name="purchase_logistics_stage" widget="badge" decoration-info="purchase_logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-warning="purchase_logistics_stage in ('pi', 'shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="purchase_logistics_stage == 'clearance'" decoration-success="purchase_logistics_stage == 'received'" optional="show"/>
             </xpath>
         </field>
     </record>

@@ -1,5 +1,5 @@
 # Purchase Lot & Serial Expiration Tracking with QR Automation (Odoo 19)
-**Module:** `purchase_lot_expiry` | **Version:** `19.0.2.0.0` | **License:** LGPL-3
+**Module:** `purchase_lot_expiry` | **Version:** `19.0.3.0.0` | **License:** LGPL-3
 
 This guide provides a comprehensive walkthrough of the Lot/Serial synchronization, dynamic QR label printing, and warehouse receiving scanning workflows for testing and training with your team.
 
@@ -144,3 +144,35 @@ To prevent accounting and inventory mismatches:
 | `views/stock_picking_views.xml` | Stock receipt form view extensions, fast scanner bar, and header buttons. |
 | `security/ir.model.access.csv` | Access rights for all models and transient wizards. |
 | `__manifest__.py` | Module metadata, dependencies (`barcodes`), and registered data files. |
+
+---
+
+## 7. Logistics Pipeline & Clearance Checklist Workflow (New in v19.0.3.0.0)
+
+### A. The 10-Stage Logistics Pipeline
+Every Purchase Order tracks physical and documentary milestones via sequential action buttons and an interactive statusbar:
+1. **طلب سعر (RFQ)**: Standard draft procurement stage.
+2. **أمر شراء (PO)**: Confirmed purchase order with supplier. In this stage:
+   - Select **نوع الشحن (Freight Type)**: بحرية (Sea Freight) or جوية (Air Freight).
+   - Select **المخزن المستلم (Destination Warehouse)**: Auto-syncs with the incoming operation type (`picking_type_id`).
+3. **قيد التصنيع (Manufacturing)**: Goods are undergoing factory manufacturing overseas.
+4. **تدقيق تواريخ التلف (Expiry Check)**: Verification of production batches, lots, and expiration dates.
+5. **فاتورة شراء (PI - Purchase/Proforma Invoice)**:
+   - **Warehouse Integration**: The complete receipt (`stock.picking`) appears in the warehouse system with all products, quantities, lots, and expiration dates.
+   - **Read-Only Lock (عرض فقط)**: The receipt is strictly view-only in the warehouse. Warehouse workers cannot validate or scan materials. Clear warning banners indicate receiving is locked.
+6. **حجز الشحنة (Shipment Booking)**: Container/air cargo space booking.
+7. **نقل البضاعة للميناء / المطار (Transport to Port/Airport)**: Inland transit to port of loading.
+8. **الشحنة في الطريق (Shipment on the way)**: International sea or air transit.
+9. **التخليص (Clearance)**:
+   - **Warehouse Receiving Unlocked**: At this stage, the incoming shipment is completely unlocked for warehouse receiving.
+   - The **Validate (اعتماد)** button, **Scan Receipt QR** desktop wizard, and **Mobile Camera QR Scanner** become fully active and available.
+10. **الاستلام المخزني (Received by warehouse)**: Once warehouse validates the receipt, the purchase order automatically transitions to completed receipt.
+
+### B. Approvals & Customs Checklist (قائمة الموافقات والتخليص)
+Visible from PO stage and all subsequent stages under a dedicated tab:
+- **موافقة وزارة الصحة (MOH Approval)**: Checkbox toggle, reference number, approval date, and attachment upload link.
+- **موافقة وزارة التجارة (MOT Approval)**: Checkbox toggle, import license reference, date, and attachment upload link.
+- **التصديق (Attestation & Legalization)**: Checkbox toggle, certificate of origin reference, date, and attachment upload link.
+- **إخراج كمرك (Customs Release)**: Checkbox toggle, customs manifest reference, date, and attachment upload link.
+
+*Note: All checklist items and attachments are optional (non-blocking) and can be filled in progressively as official documents are issued.*

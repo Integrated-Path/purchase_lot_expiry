@@ -18,6 +18,52 @@ class StockPicking(models.Model):
         readonly=True,
         copy=False
     )
+    purchase_logistics_stage = fields.Selection(
+        related='purchase_id.logistics_stage',
+        string='مرحلة الشحنة / Order Logistics Stage',
+        store=True,
+        readonly=True
+    )
+    is_receipt_locked_for_clearance = fields.Boolean(
+        string='Receipt Locked until Clearance',
+        compute='_compute_receipt_locked_for_clearance',
+        help='Locks receiving and validation until purchase order reaches clearance stage.'
+    )
+
+    @api.depends('purchase_id.logistics_stage', 'picking_type_code')
+    def _compute_receipt_locked_for_clearance(self):
+        for picking in self:
+            if picking.picking_type_code == 'incoming' and picking.purchase_id:
+                picking.is_receipt_locked_for_clearance = (
+                    picking.purchase_id.logistics_stage not in ('clearance', 'received')
+                )
+            else:
+                picking.is_receipt_locked_for_clearance = False
+
+    def button_validate(self):
+        for picking in self:
+            if picking.picking_type_code == 'incoming' and picking.purchase_id and picking.is_receipt_locked_for_clearance:
+                stage_label = dict(picking.purchase_id._fields['logistics_stage'].selection).get(
+                    picking.purchase_id.logistics_stage
+                ) or picking.purchase_id.logistics_stage
+                raise UserError(_(
+                    "⚠️ لا يمكن استلام هذه الشحنة حالياً في المخازن.\n\n"
+                    "الشحنة في مرحلة: [%s].\n"
+                    "الشحنة للعرض والمتابعة فقط، والاستلام المخزني متاح فقط عندما تصل الشحنة إلى مرحلة 'التخليص (Clearance)'."
+                ) % stage_label)
+
+        res = super(StockPicking, self).button_validate()
+
+        for picking in self:
+            if picking.state == 'done' and picking.picking_type_code == 'incoming' and picking.purchase_id:
+                po = picking.purchase_id
+                incoming_picks = po.picking_ids.filtered(lambda x: x.picking_type_code == 'incoming')
+                if all(p.state in ('done', 'cancel') for p in incoming_picks):
+                    po.logistics_stage = 'received'
+                    po.message_post(body=_(
+                        "تم استلام الشحنة في المخازن بنجاح بواسطة الإذن: <b>%s</b>، واكتملت مرحلة الاستلام المخزني."
+                    ) % picking.name)
+        return res
 
     def action_open_purchase_lot_qr_wizard(self):
         """ Open QR Label generation wizard pre-filled with lots from this purchase receipt """
@@ -78,6 +124,9 @@ class StockPicking(models.Model):
         self.ensure_one()
         if self.state in ('done', 'cancel'):
             raise UserError(_("This transfer is already in state '%s' and cannot be processed.") % self.state)
+        if self.is_receipt_locked_for_clearance:
+            stage_label = dict(self.purchase_id._fields['logistics_stage'].selection).get(self.purchase_id.logistics_stage) or self.purchase_id.logistics_stage
+            raise UserError(_("⚠️ لا يمكن فتح نافذة مسح الاستلام حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط في مرحلة 'التخليص (Clearance)'.") % stage_label)
 
         wizard = self.env['stock.picking.qr.scan.wizard'].create({
             'picking_id': self.id,
@@ -193,6 +242,9 @@ class StockPicking(models.Model):
         self.ensure_one()
         if self.state in ('done', 'cancel'):
             raise UserError(_("Receipt '%s' is in state '%s' and cannot be modified.") % (self.name, self.state))
+        if self.is_receipt_locked_for_clearance:
+            stage_label = dict(self.purchase_id._fields['logistics_stage'].selection).get(self.purchase_id.logistics_stage) or self.purchase_id.logistics_stage
+            raise UserError(_("⚠️ لا يمكن مسح واستلام المواد لهذه الشحنة حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط في مرحلة 'التخليص (Clearance)'.") % stage_label)
 
         data = self._parse_qr_payload(raw_string)
         lot_name = data.get('lot_name')
@@ -368,6 +420,9 @@ class StockPicking(models.Model):
         self.ensure_one()
         if self.state in ('done', 'cancel'):
             raise UserError(_("Transfer '%s' is in state '%s' and cannot be processed.") % (self.name, self.state))
+        if self.is_receipt_locked_for_clearance:
+            stage_label = dict(self.purchase_id._fields['logistics_stage'].selection).get(self.purchase_id.logistics_stage) or self.purchase_id.logistics_stage
+            raise UserError(_("⚠️ لا يمكن فتح كاميرا المسح للاستلام حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط في مرحلة 'التخليص (Clearance)'.") % stage_label)
         wizard = self.env['stock.picking.mobile.qr.wizard'].create({
             'picking_id': self.id,
         })
