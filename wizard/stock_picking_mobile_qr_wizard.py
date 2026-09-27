@@ -61,6 +61,7 @@ class StockPickingMobileQrWizard(models.TransientModel):
                 for m in moves
             )
 
+    @api.depends('picking_id.move_ids.quantity', 'picking_id.move_ids.product_uom_qty', 'picking_id.move_line_ids.quantity', 'picking_id.move_line_ids.lot_id')
     def _compute_lines(self):
         for wizard in self:
             lines = []
@@ -78,119 +79,41 @@ class StockPickingMobileQrWizard(models.TransientModel):
     def process_mobile_qr_scan(self, raw_payload):
         """
         Invoked asynchronously by the OWL camera widget upon every successful scan.
-        Format: PRODUCT_REF|LOT_NUMBER|BOX_QTY
+        Supports:
+        1. Structured Delimited: PROD:code|LOT:lot|EXP:date|QTY:qty
+        2. Positional Delimited: code|lot|qty or code|lot|exp|qty
+        3. Structured JSON: {"b": code, "l": lot, "e": date, "q": qty}
+        4. Plain lot / barcode or GS1-128
         """
         self.ensure_one()
         if not raw_payload:
             return {'success': False, 'message': _("Empty QR scan received.")}
 
         raw_str = raw_payload.strip()
-        parts = [p.strip() for p in raw_str.split('|')]
-
-        if len(parts) < 3:
-            msg = _("Invalid QR format '%(code)s'. Expected: PRODUCT_REF|LOT_NUMBER|BOX_QTY") % {'code': raw_str}
-            self._append_log(msg, 'danger')
-            return {'success': False, 'message': msg}
-
-        product_ref = parts[0]
-        lot_number = parts[1]
-        qty_str = parts[3]
 
         try:
-            box_qty = float(qty_str)
-            if box_qty <= 0:
-                raise ValueError()
-        except (ValueError, TypeError):
-            msg = _("Invalid box quantity '%(qty)s'. Must be a positive number.") % {'qty': qty_str}
-            self._append_log(msg, 'danger')
-            return {'success': False, 'message': msg}
+            res = self.picking_id._process_receipt_qr_payload(raw_str)
+            params = res.get('params', {}) if isinstance(res, dict) else {}
+            res_type = params.get('type', 'info')
+            msg = params.get('message', _("Scan processed."))
 
-        # 1. Search product.product by default_code or barcode
-        product = self.env['product.product'].search([
-            '|',
-            ('default_code', '=', product_ref),
-            ('barcode', '=', product_ref)
-        ], limit=1)
+            is_success = (res_type == 'success')
+            status_type = 'success' if is_success else 'danger'
+            self._append_log(msg, status_type)
 
-        if not product:
-            msg = _("Product reference '%(ref)s' not found in system.") % {'ref': product_ref}
-            self._append_log(msg, 'danger')
-            return {'success': False, 'message': msg}
+            self.invalidate_recordset(['line_ids', 'total_demand', 'total_done', 'is_all_fulfilled'])
 
-        # 2. Search stock.lot matching lot_number and picking company. Create if missing (Receipt)
-        company = self.picking_id.company_id or self.env.company
-        lot = self.env['stock.lot'].search([
-            ('name', '=', lot_number),
-            ('product_id', '=', product.id),
-            '|', ('company_id', '=', False), ('company_id', '=', company.id)
-        ], limit=1)
-
-        if not lot:
-            lot = self.env['stock.lot'].create({
-                'name': lot_number,
-                'product_id': product.id,
-                'company_id': company.id,
-            })
-
-        # 3. Find matching stock.move inside active picking
-        open_moves = self.picking_id.move_ids.filtered(lambda m: m.state not in ('done', 'cancel'))
-        matched_move = open_moves.filtered(lambda m: m.product_id == product)
-
-        if not matched_move:
-            msg = _("Product '%(product)s' [%(code)s] is not part of receipt %(picking)s.") % {
-                'product': product.display_name,
-                'code': product_ref,
-                'picking': self.picking_id.name,
+            return {
+                'success': is_success,
+                'message': msg,
             }
-            self._append_log(msg, 'danger')
-            return {'success': False, 'message': msg}
-
-        matched_move = matched_move[0]
-
-        # 4. Add scanned QTY to corresponding stock.move.line
-        move_line = matched_move.move_line_ids.filtered(lambda ml: ml.lot_id == lot)
-        if not move_line:
-            empty_ml = matched_move.move_line_ids.filtered(lambda ml: not ml.lot_id and ml.quantity == 0)
-            if empty_ml:
-                move_line = empty_ml[0]
-                move_line.write({
-                    'lot_id': lot.id,
-                    'quantity': box_qty,
-                    'location_dest_id': matched_move.location_dest_id.id,
-                })
-            else:
-                move_line = self.env['stock.move.line'].create({
-                    'move_id': matched_move.id,
-                    'picking_id': self.picking_id.id,
-                    'product_id': product.id,
-                    'product_uom_id': (getattr(matched_move, 'product_uom', False) or getattr(matched_move, 'product_uom_id', False)).id,
-                    'location_id': matched_move.location_id.id,
-                    'location_dest_id': matched_move.location_dest_id.id,
-                    'lot_id': lot.id,
-                    'quantity': box_qty,
-                })
-        else:
-            move_line = move_line[0]
-            move_line.quantity += box_qty
-
-        success_msg = _("✓ Added %(qty)s units of '%(product)s' (Lot: %(lot)s) [Done: %(done)s / %(demand)s]") % {
-            'qty': box_qty,
-            'product': product.display_name,
-            'lot': lot.name,
-            'done': matched_move.quantity,
-            'demand': matched_move.product_uom_qty,
-        }
-        self._append_log(success_msg, 'success')
-
-        return {
-            'success': True,
-            'message': success_msg,
-            'product_name': product.display_name,
-            'lot_name': lot.name,
-            'added_qty': box_qty,
-            'total_done': matched_move.quantity,
-            'total_demand': matched_move.product_uom_qty,
-        }
+        except Exception as e:
+            err_msg = str(e)
+            self._append_log(err_msg, 'danger')
+            return {
+                'success': False,
+                'message': err_msg,
+            }
 
     def _append_log(self, message, status_type):
         now_str = fields.Datetime.now().strftime('%H:%M:%S')

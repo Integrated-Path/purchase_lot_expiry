@@ -336,19 +336,22 @@ class StockPicking(models.Model):
         lot = False
         if lot_name:
             # First check if the move already has this lot assigned
+            clean_raw = raw_string.strip()
             existing_move_lots = (matched_move.lot_ids | matched_move.move_line_ids.lot_id).filtered(
-                lambda l: l.name == lot_name
+                lambda l: l.name == lot_name or (getattr(l, 'qr_code_value', False) and l.qr_code_value == clean_raw)
             )
             if existing_move_lots:
                 lot = existing_move_lots[0]
             else:
                 domain = [
-                    ('name', '=', lot_name),
+                    '|', ('name', '=', lot_name), ('qr_code_value', '=', clean_raw),
                     ('product_id', '=', product.id),
                 ]
                 if self.company_id:
                     domain.extend(['|', ('company_id', '=', False), ('company_id', '=', self.company_id.id)])
                 lot = self.env['stock.lot'].search(domain, limit=1)
+
+            clean_exp_str = exp_date_str.replace(' ', '') if exp_date_str else False
 
             if not lot:
                 lot_vals = {
@@ -357,15 +360,15 @@ class StockPicking(models.Model):
                 }
                 if self.company_id:
                     lot_vals['company_id'] = self.company_id.id
-                if exp_date_str:
+                if clean_exp_str:
                     try:
-                        lot_vals['expiration_date'] = fields.Datetime.to_datetime(exp_date_str)
+                        lot_vals['expiration_date'] = fields.Datetime.to_datetime(clean_exp_str)
                     except Exception:
                         pass
                 lot = self.env['stock.lot'].create(lot_vals)
-            elif exp_date_str and not lot.expiration_date:
+            elif clean_exp_str and not lot.expiration_date:
                 try:
-                    lot.expiration_date = fields.Datetime.to_datetime(exp_date_str)
+                    lot.expiration_date = fields.Datetime.to_datetime(clean_exp_str)
                 except Exception:
                     pass
 
