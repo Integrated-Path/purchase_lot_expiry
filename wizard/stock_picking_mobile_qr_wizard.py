@@ -94,7 +94,7 @@ class StockPickingMobileQrWizard(models.TransientModel):
 
         product_ref = parts[0]
         lot_number = parts[1]
-        qty_str = parts[2]
+        qty_str = parts[3]
 
         try:
             box_qty = float(qty_str)
