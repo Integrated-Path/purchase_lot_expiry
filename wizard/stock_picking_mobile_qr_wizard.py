@@ -163,7 +163,7 @@ class StockPickingMobileQrWizard(models.TransientModel):
                     'move_id': matched_move.id,
                     'picking_id': self.picking_id.id,
                     'product_id': product.id,
-                    'product_uom_id': (matched_move.product_uom_id or getattr(matched_move, 'product_uom', False)).id,
+                    'product_uom_id': (getattr(matched_move, 'product_uom', False) or getattr(matched_move, 'product_uom_id', False)).id,
                     'location_id': matched_move.location_id.id,
                     'location_dest_id': matched_move.location_dest_id.id,
                     'lot_id': lot.id,
