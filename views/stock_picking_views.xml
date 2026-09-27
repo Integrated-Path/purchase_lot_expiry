@@ -21,20 +21,20 @@
             <!-- Informative Status Banners and Inline Fast Scanner Bar above notebook -->
             <xpath expr="//notebook" position="before">
                 <!-- Warning Banner: View-Only until Clearance -->
-                <div class="alert alert-warning d-flex align-items-center mb-3 shadow-sm" role="alert" invisible="not is_receipt_locked_for_clearance">
-                    <i class="fa fa-lock fa-2x me-3 text-warning"/>
+                <div class="alert alert-warning d-flex align-items-center mb-3 shadow-sm" role="status" invisible="not is_receipt_locked_for_clearance">
+                    <i class="fa fa-lock fa-2x me-3 text-warning" title="الشحنة للعرض فقط" aria-label="الشحنة للعرض فقط"/>
                     <div>
-                        <h5 class="alert-heading mb-1 fw-bold">الشحنة للعرض فقط في المخازن (عرض فقط)</h5>
+                        <h5 class="mb-1 fw-bold">الشحنة للعرض فقط في المخازن (عرض فقط)</h5>
                         <span>هذه الشحنة مرتبطة بأمر شراء في مرحلة: <field name="purchase_logistics_stage" class="fw-bold text-dark"/>.<br/>
                         لا يمكن استلام أو مسح المواد في المخازن إلا بعد وصول أمر الشراء إلى مرحلة <b>التخليص (Clearance)</b>.</span>
                     </div>
                 </div>
 
                 <!-- Success Banner: Clearance Stage Unlocked for Receiving -->
-                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="alert" invisible="state in ('done', 'cancel') or not purchase_id or purchase_logistics_stage != 'clearance'">
-                    <i class="fa fa-unlock-alt fa-2x me-3 text-success"/>
+                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="status" invisible="state in ('done', 'cancel') or not purchase_id or purchase_logistics_stage != 'clearance'">
+                    <i class="fa fa-unlock-alt fa-2x me-3 text-success" title="متاح للاستلام المخزني" aria-label="متاح للاستلام المخزني"/>
                     <div>
-                        <h5 class="alert-heading mb-1 fw-bold">متاح للاستلام المخزني</h5>
+                        <h5 class="mb-1 fw-bold">متاح للاستلام المخزني</h5>
                         <span>وصلت الشحنة إلى مرحلة <b>التخليص (Clearance)</b>. يمكن الآن للمخازن استلام ومسح المواد واعتماد إذن الاستلام.</span>
                     </div>
                 </div>
