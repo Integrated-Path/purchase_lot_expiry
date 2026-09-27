@@ -119,6 +119,14 @@ class StockPicking(models.Model):
             return self.action_open_purchase_lot_qr_wizard()
         return super().action_open_lot_qr_wizard()
 
+    def _ensure_receipt_quantities_zero_for_scan(self):
+        """ Ensure incoming receipt has Done quantities at 0 so scanning fills the order. """
+        for picking in self:
+            if picking.picking_type_code == 'incoming' and picking.state not in ('done', 'cancel') and picking.purchase_id:
+                has_partial_scans = any(0 < ml.quantity < ml.move_id.product_uom_qty for ml in picking.move_line_ids)
+                if not has_partial_scans and all(ml.quantity == ml.move_id.product_uom_qty for ml in picking.move_line_ids if ml.move_id.product_uom_qty > 0):
+                    picking.purchase_id._init_incoming_receipt_quantities()
+
     def action_open_receipt_qr_scan_wizard(self):
         """ Open dedicated warehouse receipt kiosk scanner wizard """
         self.ensure_one()
@@ -128,6 +136,7 @@ class StockPicking(models.Model):
             stage_label = dict(self.purchase_id._fields['logistics_stage'].selection).get(self.purchase_id.logistics_stage) or self.purchase_id.logistics_stage
             raise UserError(_("⚠️ لا يمكن فتح نافذة مسح الاستلام حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط في مرحلة 'التخليص (Clearance)'.") % stage_label)
 
+        self._ensure_receipt_quantities_zero_for_scan()
         wizard = self.env['stock.picking.qr.scan.wizard'].create({
             'picking_id': self.id,
         })
@@ -163,6 +172,7 @@ class StockPicking(models.Model):
         Parse QR payload supporting:
         1. JSON: {"barcode": "...", "lot": "...", "exp": "YYYY-MM-DD", "qty": 1.0}
         2. Delimited: PROD:code|LOT:lotname|EXP:YYYY-MM-DD|QTY:1.0
+           or Positional Delimited: PROD|LOT|QTY
         3. GS1-128: (01)gtin(10)lot(17)YYMMDD or 01...10...17...
         4. Fallback: Plain lot name or product barcode
         """
@@ -190,7 +200,7 @@ class StockPicking(models.Model):
             except Exception:
                 pass
 
-        # 2. Delimited string: PROD:...|LOT:...|EXP:...|QTY:...
+        # 2. Delimited string: PROD:...|LOT:...|EXP:...|QTY:... or Positional: CODE|LOT|QTY
         if '|' in raw_string or ':' in raw_string:
             parts = raw_string.split('|')
             has_keys = False
@@ -215,6 +225,21 @@ class StockPicking(models.Model):
                             data['quantity'] = 1.0
                         has_keys = True
             if has_keys:
+                return data
+            elif len(parts) >= 2:
+                # Positional format: PROD_CODE|LOT_NAME|[QTY]
+                data['product_code'] = parts[0].strip()
+                data['lot_name'] = parts[1].strip()
+                if len(parts) >= 3:
+                    try:
+                        data['quantity'] = float(parts[2].strip())
+                    except ValueError:
+                        data['expiration_date'] = parts[2].strip()
+                if len(parts) >= 4:
+                    try:
+                        data['quantity'] = float(parts[3].strip())
+                    except ValueError:
+                        pass
                 return data
 
         # 3. GS1-128 format with parentheses: (01)GTIN(10)LOT(17)YYMMDD
@@ -262,13 +287,17 @@ class StockPicking(models.Model):
         if product_id:
             matched_move = open_moves.filtered(lambda m: m.product_id.id == product_id)
 
-        # 2. Match by barcode
+        # 2. Match by barcode or default_code
         if not matched_move and product_barcode:
-            matched_move = open_moves.filtered(lambda m: m.product_id.barcode == product_barcode)
+            matched_move = open_moves.filtered(
+                lambda m: m.product_id.barcode == product_barcode or m.product_id.default_code == product_barcode
+            )
 
         # 3. Match by default_code
         if not matched_move and product_code:
-            matched_move = open_moves.filtered(lambda m: m.product_id.default_code == product_code)
+            matched_move = open_moves.filtered(
+                lambda m: m.product_id.default_code == product_code or m.product_id.name == product_code
+            )
 
         # 4. Match by existing lot
         if not matched_move and lot_name:
@@ -363,12 +392,7 @@ class StockPicking(models.Model):
                     })
             else:
                 move_line = move_line[0]
-                if move_line.quantity == 0:
-                    move_line.quantity = qty_to_add
-                elif qty_to_add > 1.0 and move_line.quantity == qty_to_add:
-                    pass
-                else:
-                    move_line.quantity += qty_to_add
+                move_line.quantity += qty_to_add
         else:
             # Non-lot product scan or unassigned lot
             if matched_move.move_line_ids:
@@ -389,6 +413,7 @@ class StockPicking(models.Model):
         if lot and lot not in matched_move.lot_ids:
             matched_move.lot_ids = [(4, lot.id)]
 
+        matched_move.invalidate_recordset(['quantity'])
         status_msg = _("✓ Scanned %(product)s | Lot: %(lot)s | Qty: +%(qty)s (Done: %(done)s / %(demand)s)") % {
             'product': product.display_name,
             'lot': lot.name if lot else _('N/A'),
@@ -423,6 +448,7 @@ class StockPicking(models.Model):
         if self.is_receipt_locked_for_clearance:
             stage_label = dict(self.purchase_id._fields['logistics_stage'].selection).get(self.purchase_id.logistics_stage) or self.purchase_id.logistics_stage
             raise UserError(_("⚠️ لا يمكن فتح كاميرا المسح للاستلام حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط في مرحلة 'التخليص (Clearance)'.") % stage_label)
+        self._ensure_receipt_quantities_zero_for_scan()
         wizard = self.env['stock.picking.mobile.qr.wizard'].create({
             'picking_id': self.id,
         })

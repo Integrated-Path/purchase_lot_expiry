@@ -1,6 +1,6 @@
-# -*- coding: utf-8 -*-
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+from markupsafe import Markup
 
 LOGISTICS_STAGES = [
     ('rfq', 'طلب سعر (RFQ)'),
@@ -147,51 +147,90 @@ class PurchaseOrder(models.Model):
             order.logistics_stage = 'rfq'
         return res
 
+    def write(self, vals):
+        if vals.get('logistics_stage') in ('pi', 'shipment_booking', 'transport_port', 'on_the_way', 'clearance', 'received'):
+            self._check_tracked_products_have_lots()
+        return super(PurchaseOrder, self).write(vals)
+
+    def _check_tracked_products_have_lots(self):
+        """
+        Rule: In 'تدقيق تواريخ التلف (Expiry Check)', ensure every product tracked by lot/serial
+        in purchase order lines has its lot established before moving to PI stage.
+        """
+        for order in self:
+            missing_lot_products = []
+            missing_expiry_products = []
+            for line in order.order_line.filtered(lambda l: not l.display_type and l.product_id):
+                if line.product_id.tracking in ('lot', 'serial'):
+                    if not line.lot_ids:
+                        missing_lot_products.append(line.product_id.display_name)
+                    elif getattr(line.product_id, 'use_expiration_date', False) and not line.expiration_date and not any(l.expiration_date for l in line.lot_ids):
+                        missing_expiry_products.append(line.product_id.display_name)
+
+            error_msgs = []
+            if missing_lot_products:
+                error_msgs.append(
+                    _("⚠️ لا يمكن الانتقال إلى مرحلة فاتورة الشراء (PI) لأن المنتجات التالية خاضعة للتتبع ولكن لم يتم تحديد رقم التشغيلة/الدفعة (Lot) لها:\n• %s\n\nيرجى تحديد أرقام التشغيلات وتواريخ الصلاحية في مرحلة 'تدقيق تواريخ التلف (Expiry Check)' قبل المتابعة.\n\n"
+                      "Cannot proceed to PI stage: The following tracked product(s) do not have a lot/serial number assigned:\n• %s\n"
+                      "Please establish lots and expiration dates before moving to PI stage.")
+                    % ("\n• ".join(missing_lot_products), "\n• ".join(missing_lot_products))
+                )
+            if missing_expiry_products:
+                error_msgs.append(
+                    _("⚠️ المنتجات التالية تتطلب تاريخ صلاحية ولكن لم يتم تحديده:\n• %s\n\nيرجى تحديد تاريخ الصلاحية للتشغيلات قبل المتابعة.")
+                    % "\n• ".join(missing_expiry_products)
+                )
+            if error_msgs:
+                raise UserError("\n\n".join(error_msgs))
+
     def action_stage_manufacturing(self):
         for order in self:
             order.logistics_stage = 'manufacturing'
-            order.message_post(body=_('تم تحديث مرحلة الشحنة إلى: <b>قيد التصنيع (Manufacturing)</b>'))
+            order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>قيد التصنيع (Manufacturing)</b>')))
 
     def action_stage_expiry_check(self):
         for order in self:
             order.logistics_stage = 'expiry_check'
-            order.message_post(body=_('تم تحديث مرحلة الشحنة إلى: <b>تدقيق تواريخ التلف (Expiry Check)</b>'))
+            order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>تدقيق تواريخ التلف (Expiry Check)</b>')))
 
     def action_stage_pi(self):
         for order in self:
+            order._check_tracked_products_have_lots()
             order.logistics_stage = 'pi'
-            order.message_post(body=_(
+            order.message_post(body=Markup(_(
                 'تم تحديث مرحلة الشحنة إلى: <b>فاتورة شراء (PI)</b>.<br/>'
                 'تم إظهار إذن الاستلام في المخازن (عرض فقط، غير متاح للاستلام حتى مرحلة التخليص).'
-            ))
+            )))
             if not order.picking_ids:
                 super(PurchaseOrder, order)._create_picking()
+            order._init_incoming_receipt_quantities()
 
     def action_stage_shipment_booking(self):
         for order in self:
             order.logistics_stage = 'shipment_booking'
-            order.message_post(body=_('تم تحديث مرحلة الشحنة إلى: <b>حجز الشحنة (Shipment Booking)</b>'))
+            order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>حجز الشحنة (Shipment Booking)</b>')))
 
     def action_stage_transport_port(self):
         for order in self:
             order.logistics_stage = 'transport_port'
             target_desc = _('الميناء البحري') if order.freight_type == 'sea' else _('المطار الجوي')
-            order.message_post(body=_('تم تحديث مرحلة الشحنة إلى: <b>نقل البضاعة إلى %s</b>') % target_desc)
+            order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>نقل البضاعة إلى %s</b>')) % target_desc)
 
     def action_stage_on_the_way(self):
         for order in self:
             order.logistics_stage = 'on_the_way'
-            order.message_post(body=_('تم تحديث مرحلة الشحنة إلى: <b>الشحنة في الطريق (Shipment on the way)</b>'))
+            order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>الشحنة في الطريق (Shipment on the way)</b>')))
 
     def action_stage_clearance(self):
         for order in self:
             order.logistics_stage = 'clearance'
-            order.message_post(body=_(
+            order.message_post(body=Markup(_(
                 'تم تحديث مرحلة الشحنة إلى: <b>التخليص (Clearance)</b>.<br/>'
                 '✅ أصبحت الشحنة الآن متاحة في المخازن للاستلام والمسح والاعتماد.'
-            ))
+            )))
             if not order.picking_ids:
                 super(PurchaseOrder, order)._create_picking()
+            order._init_incoming_receipt_quantities()
 
     def action_stage_received(self):
         for order in self:
@@ -199,7 +238,7 @@ class PurchaseOrder(models.Model):
             if incoming:
                 return order.action_view_picking()
             order.logistics_stage = 'received'
-            order.message_post(body=_('تم تحديث مرحلة الشحنة إلى: <b>الاستلام المخزني (Received by warehouse)</b>'))
+            order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>الاستلام المخزني (Received by warehouse)</b>')))
 
     def action_stage_previous(self):
         stage_sequence = [
@@ -214,15 +253,31 @@ class PurchaseOrder(models.Model):
                     prev_stage = stage_sequence[idx - 1]
                     order.logistics_stage = prev_stage
                     stage_name = dict(order._fields['logistics_stage'].selection).get(prev_stage)
-                    order.message_post(body=_('تم التراجع إلى المرحلة السابقة: <b>%s</b>') % stage_name)
+                    order.message_post(body=Markup(_('تم التراجع إلى المرحلة السابقة: <b>%s</b>')) % stage_name)
 
     def _create_picking(self):
         orders_to_create = self.filtered(lambda po: po.logistics_stage in (
             'pi', 'shipment_booking', 'transport_port', 'on_the_way', 'clearance', 'received'
         ))
         if orders_to_create:
-            return super(PurchaseOrder, orders_to_create)._create_picking()
+            res = super(PurchaseOrder, orders_to_create)._create_picking()
+            for order in orders_to_create:
+                order._init_incoming_receipt_quantities()
+            return res
         return True
+
+    def _init_incoming_receipt_quantities(self):
+        """ Ensure incoming receipts start with 0 Done quantity and await QR scanning. """
+        for order in self:
+            for picking in order.picking_ids.filtered(lambda p: p.picking_type_code == 'incoming' and p.state not in ('done', 'cancel')):
+                for move in picking.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
+                    move.picked = False
+                    line = move.purchase_line_id
+                    if line:
+                        line._update_stock_move_lots()
+                    else:
+                        move.move_line_ids.unlink()
+                        move.invalidate_recordset(['quantity'])
 
     def action_open_lot_qr_wizard(self):
         self.ensure_one()

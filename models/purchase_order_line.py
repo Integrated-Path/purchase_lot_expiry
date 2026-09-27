@@ -259,14 +259,27 @@ class PurchaseOrderLine(models.Model):
                 draft_bill_lines.write({'lot_ids': [(6, 0, line.lot_ids.ids)]})
 
     def _update_stock_move_lots(self):
-        """ Update stock.move and stock.move.line for stock pickings linked to this line """
+        """ Update stock.move and stock.move.line for stock pickings linked to this line,
+            ensuring Done quantity starts at 0.0 to await QR scan fulfillment. """
         for line in self:
             if not line.move_ids:
                 continue
             for move in line.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
+                move.picked = False
+                uom = getattr(move, 'product_uom', False) or getattr(move, 'product_uom_id', False)
                 if not line.lot_ids:
                     move.lot_ids = [(5, 0, 0)]
                     move.move_line_ids.unlink()
+                    self.env['stock.move.line'].create({
+                        'move_id': move.id,
+                        'picking_id': move.picking_id.id if move.picking_id else False,
+                        'product_id': move.product_id.id,
+                        'product_uom_id': uom.id if uom else False,
+                        'location_id': move.location_id.id,
+                        'location_dest_id': move.location_dest_id.id,
+                        'quantity': 0.0,
+                        'picked': False,
+                    })
                 else:
                     move.lot_ids = [(6, 0, line.lot_ids.ids)]
                     move.move_line_ids.unlink()
@@ -277,29 +290,30 @@ class PurchaseOrderLine(models.Model):
                                 'move_id': move.id,
                                 'picking_id': move.picking_id.id if move.picking_id else False,
                                 'product_id': move.product_id.id,
-                                'product_uom_id': (getattr(move, 'product_uom', False) or getattr(move, 'product_uom_id', False)).id,
+                                'product_uom_id': uom.id if uom else False,
                                 'location_id': move.location_id.id,
                                 'location_dest_id': move.location_dest_id.id,
                                 'lot_id': pol_lot.lot_id.id,
-                                'quantity': pol_lot.quantity,
+                                'quantity': 0.0,
+                                'picked': False,
                             })
                         if move_lines_vals:
                             self.env['stock.move.line'].create(move_lines_vals)
                     else:
-                        nb_lots = len(line.lot_ids)
-                        qty_per_lot = move.product_uom_qty / nb_lots if nb_lots > 0 else 0.0
                         move_lines_vals = [{
                             'move_id': move.id,
                             'picking_id': move.picking_id.id if move.picking_id else False,
                             'product_id': move.product_id.id,
-                            'product_uom_id': (getattr(move, 'product_uom', False) or getattr(move, 'product_uom_id', False)).id,
+                            'product_uom_id': uom.id if uom else False,
                             'location_id': move.location_id.id,
                             'location_dest_id': move.location_dest_id.id,
                             'lot_id': lot.id,
-                            'quantity': qty_per_lot,
+                            'quantity': 0.0,
+                            'picked': False,
                         } for lot in line.lot_ids]
                         if move_lines_vals:
                             self.env['stock.move.line'].create(move_lines_vals)
+                move.invalidate_recordset(['quantity'])
 
     def _prepare_stock_moves(self, picking):
         return super(PurchaseOrderLine, self)._prepare_stock_moves(picking)
