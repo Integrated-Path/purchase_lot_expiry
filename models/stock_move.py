@@ -36,3 +36,13 @@ class StockMove(models.Model):
                     if exp_str not in expiries:
                         expiries.append(exp_str)
             move.lot_expiry_display = ", ".join(sorted(set(expiries))) if expiries else ""
+
+    def _set_lot_ids(self):
+        """
+        Odoo 19 bugfix: In stock.move._set_lot_ids(), line 676 calls
+        self._prepare_move_line_vals() instead of move._prepare_move_line_vals(),
+        causing 'ValueError: Expected singleton: stock.move(x, y)' when len(self) > 1.
+        By delegating per single move, each invocation executes safely as a singleton.
+        """
+        for move in self:
+            super(StockMove, move)._set_lot_ids()

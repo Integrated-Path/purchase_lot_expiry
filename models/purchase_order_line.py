@@ -302,11 +302,7 @@ class PurchaseOrderLine(models.Model):
                             self.env['stock.move.line'].create(move_lines_vals)
 
     def _prepare_stock_moves(self, picking):
-        res = super(PurchaseOrderLine, self)._prepare_stock_moves(picking)
-        for vals in res:
-            if self.lot_ids:
-                vals['lot_ids'] = [(6, 0, self.lot_ids.ids)]
-        return res
+        return super(PurchaseOrderLine, self)._prepare_stock_moves(picking)
 
     def _create_stock_moves(self, picking):
         moves = super(PurchaseOrderLine, self)._create_stock_moves(picking)
