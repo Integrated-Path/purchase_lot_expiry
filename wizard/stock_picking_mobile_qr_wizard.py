@@ -20,7 +20,7 @@ class StockPickingMobileQrWizard(models.TransientModel):
     picking_type_code = fields.Selection(related='picking_id.picking_type_code', readonly=True)
 
     last_scan_message = fields.Char(
-        string='Last Scan Status',
+        string='Last Scan Message',
         readonly=True,
         default='Ready to scan box labels.'
     )
@@ -163,7 +163,7 @@ class StockPickingMobileQrWizard(models.TransientModel):
                     'move_id': matched_move.id,
                     'picking_id': self.picking_id.id,
                     'product_id': product.id,
-                    'product_uom_id': matched_move.product_uom.id,
+                    'product_uom_id': (matched_move.product_uom_id or getattr(matched_move, 'product_uom', False)).id,
                     'location_id': matched_move.location_id.id,
                     'location_dest_id': matched_move.location_dest_id.id,
                     'lot_id': lot.id,

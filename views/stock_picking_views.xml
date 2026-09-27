@@ -18,14 +18,6 @@
                 <button name="action_open_purchase_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="picking_type_code != 'incoming'"/>
             </xpath>
 
-            <!-- Guard Standard Validate Buttons when Receipt is Locked for Clearance -->
-            <xpath expr="//button[@name='button_validate'][1]" position="attributes">
-                <attribute name="invisible">state in ('draft', 'confirmed', 'done', 'cancel') or is_receipt_locked_for_clearance</attribute>
-            </xpath>
-            <xpath expr="//button[@name='button_validate'][2]" position="attributes">
-                <attribute name="invisible">state in ('waiting', 'assigned', 'done', 'cancel') or is_receipt_locked_for_clearance</attribute>
-            </xpath>
-
             <!-- Informative Status Banners and Inline Fast Scanner Bar above notebook -->
             <xpath expr="//notebook" position="before">
                 <!-- Warning Banner: View-Only until Clearance -->
@@ -65,17 +57,9 @@
             </xpath>
 
             <!-- Operations lines lot attributes -->
-            <xpath expr="//field[@name='move_ids']/list//field[@name='lot_ids']" position="attributes">
-                <attribute name="optional">show</attribute>
-                <attribute name="options">{'no_quick_create': True}</attribute>
-            </xpath>
-            <xpath expr="//field[@name='move_ids']/list//field[@name='lot_ids']" position="before">
+            <xpath expr="//field[@name='move_ids']/list/field[@name='product_id']" position="after">
                 <field name="product_tracking" column_invisible="True"/>
-            </xpath>
-            <xpath expr="//field[@name='move_ids']/list//field[@name='lot_ids']" position="attributes">
-                <attribute name="invisible">not product_tracking or product_tracking == 'none'</attribute>
-            </xpath>
-            <xpath expr="//field[@name='move_ids']/list//field[@name='lot_ids']" position="after">
+                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
                 <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>
             </xpath>
         </field>
@@ -99,7 +83,7 @@
         <field name="model">stock.move</field>
         <field name="inherit_id" ref="stock.view_move_tree"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='product_uom']" position="after">
+            <xpath expr="//field[@name='product_id']" position="after">
                 <field name="product_tracking" column_invisible="True"/>
                 <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
                 <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>

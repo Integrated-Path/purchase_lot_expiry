@@ -40,7 +40,7 @@ This module enables end-to-end management of Lot/Serial Numbers and Expiration D
     'license': 'LGPL-3',
     'assets': {
         'web.assets_backend': [
-            'purchase_lot_expiry/static/src/**/*',
+            'purchase_lot_expiry/static/src/widgets/**/*',
         ],
     },
 }
