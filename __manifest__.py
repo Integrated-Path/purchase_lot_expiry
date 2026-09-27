@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Purchase Lot & Serial Expiration Tracking',
-    'version': '19.0.1.0.0',
+    'version': '19.0.2.0.0',
     'category': 'Inventory/Purchase',
     'summary': 'Add lot/serial numbers and expiration dates to Purchase Order lines with tag display across Pickings and Invoices',
     'description': """
