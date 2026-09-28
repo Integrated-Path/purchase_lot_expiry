@@ -1,15 +1,156 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Inherit Account Move Form View (Invoices & Vendor Bills) to display Lot Tags and Expiry Badges -->
+    <!-- Inherit Account Move Form View (Invoices & Vendor Bills) -->
     <record id="view_move_form_inherit_lot_expiry" model="ir.ui.view">
         <field name="name">account.move.form.inherit.lot.expiry</field>
         <field name="model">account.move</field>
         <field name="inherit_id" ref="account.view_move_form"/>
         <field name="arch" type="xml">
+            <!-- Header Hidden Fields for PO Logistics -->
+            <xpath expr="//header" position="inside">
+                <field name="purchase_order_id" invisible="1"/>
+
+                <!-- Vendor Bill Logistics Stage Actions -->
+                <button name="action_stage_shipment_booking" string="حجز الشحنة (Shipment Booking)" type="object" class="btn btn-primary" icon="fa-bookmark" invisible="move_type != 'in_invoice' or not purchase_order_id or logistics_stage or state == 'cancel'"/>
+                <button name="action_stage_transport_port" string="نقل للميناء / المطار (Transport)" type="object" class="btn btn-primary" icon="fa-truck" invisible="move_type != 'in_invoice' or not purchase_order_id or logistics_stage != 'shipment_booking' or state == 'cancel'"/>
+                <button name="action_stage_on_the_way" string="الشحنة في الطريق (On the way)" type="object" class="btn btn-primary" icon="fa-plane" invisible="move_type != 'in_invoice' or not purchase_order_id or logistics_stage != 'transport_port' or state == 'cancel'"/>
+                <button name="action_stage_clearance" string="بدء التخليص (Clearance)" type="object" class="btn btn-primary" icon="fa-shield" invisible="move_type != 'in_invoice' or not purchase_order_id or logistics_stage != 'on_the_way' or state == 'cancel'"/>
+                <button name="action_stage_received" string="الاستلام المخزني (Received)" type="object" class="btn btn-primary" icon="fa-check-square-o" invisible="move_type != 'in_invoice' or not purchase_order_id or logistics_stage != 'clearance' or state == 'cancel'"/>
+                <button name="action_stage_previous" string="المرحلة السابقة" type="object" class="btn btn-outline-secondary" icon="fa-arrow-left" title="التراجع إلى المرحلة السابقة" invisible="move_type != 'in_invoice' or not purchase_order_id or logistics_stage not in ('transport_port', 'on_the_way', 'clearance') or state == 'cancel'"/>
+            </xpath>
+
+            <!-- Secondary Logistics Statusbar in Header -->
+            <xpath expr="//field[@name='state'][@widget='statusbar']" position="before">
+                <field name="logistics_stage" widget="statusbar" statusbar_visible="shipment_booking,transport_port,on_the_way,clearance,received" invisible="move_type != 'in_invoice' or not purchase_order_id" readonly="1"/>
+            </xpath>
+
+            <!-- Logistics and Warehouse Info Banner above Notebook -->
+            <xpath expr="//notebook" position="before">
+                <div class="alert alert-info d-flex align-items-center mb-3 shadow-sm" role="status" invisible="move_type != 'in_invoice' or not purchase_order_id">
+                    <i class="fa fa-truck fa-2x me-3 text-info" title="بيانات الشحن" aria-label="بيانات الشحن"/>
+                    <div class="w-100 d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1 fw-bold">متابعة شحنة أمر الشراء: <field name="purchase_order_id" class="fw-bold text-dark"/></h6>
+                            <span>نوع الشحن: <field name="freight_type" class="fw-bold text-dark"/> | المستودع المستلم: <field name="destination_warehouse_id" class="fw-bold text-dark"/></span>
+                        </div>
+                    </div>
+                </div>
+            </xpath>
+
+            <!-- Clearance Checklist Tab in Notebook -->
+            <xpath expr="//notebook" position="inside">
+                <page string="قائمة الموافقات والتخليص (Clearance Checklist)" name="clearance_checklist" invisible="move_type != 'in_invoice' or not purchase_order_id">
+                    <div class="row g-3 p-2">
+                        <!-- 1. MOH Approval -->
+                        <div class="col-md-6 col-12">
+                            <div class="card h-100 shadow-sm border-0 bg-light p-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+                                    <span class="fs-6 fw-bold text-primary">
+                                        <i class="fa fa-heartbeat me-2"/> 1. موافقة وزارة الصحة (MOH Approval)
+                                    </span>
+                                    <field name="moh_approval" widget="boolean_toggle"/>
+                                </div>
+                                <group>
+                                    <field name="moh_ref" placeholder="رقم كتاب / مرجع وزارة الصحة"/>
+                                    <field name="moh_date"/>
+                                    <field name="moh_attachment_ids" widget="many2many_binary" string="المرفقات"/>
+                                </group>
+                            </div>
+                        </div>
+
+                        <!-- 2. MOT Approval -->
+                        <div class="col-md-6 col-12">
+                            <div class="card h-100 shadow-sm border-0 bg-light p-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+                                    <span class="fs-6 fw-bold text-primary">
+                                        <i class="fa fa-building-o me-2"/> 2. موافقة وزارة التجارة (MOT Approval)
+                                    </span>
+                                    <field name="mot_approval" widget="boolean_toggle"/>
+                                </div>
+                                <group>
+                                    <field name="mot_ref" placeholder="رقم إجازة الاستيراد / مرجع التجارة"/>
+                                    <field name="mot_date"/>
+                                    <field name="mot_attachment_ids" widget="many2many_binary" string="المرفقات"/>
+                                </group>
+                            </div>
+                        </div>
+
+                        <!-- 3. Attestation -->
+                        <div class="col-md-6 col-12">
+                            <div class="card h-100 shadow-sm border-0 bg-light p-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+                                    <span class="fs-6 fw-bold text-primary">
+                                        <i class="fa fa-certificate me-2"/> 3. التصديق (Attestation &amp; Legalization)
+                                    </span>
+                                    <field name="attestation_approval" widget="boolean_toggle"/>
+                                </div>
+                                <group>
+                                    <field name="attestation_ref" placeholder="رقم التصديق / شهادة المنشأ"/>
+                                    <field name="attestation_date"/>
+                                    <field name="attestation_attachment_ids" widget="many2many_binary" string="المرفقات"/>
+                                </group>
+                            </div>
+                        </div>
+
+                        <!-- 4. Customs Release -->
+                        <div class="col-md-6 col-12">
+                            <div class="card h-100 shadow-sm border-0 bg-light p-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+                                    <span class="fs-6 fw-bold text-primary">
+                                        <i class="fa fa-shield me-2"/> 4. إخراج كمرك (Customs Release)
+                                    </span>
+                                    <field name="customs_release_approval" widget="boolean_toggle"/>
+                                </div>
+                                <group>
+                                    <field name="customs_ref" placeholder="رقم المعاملة / البيان الجمركي"/>
+                                    <field name="customs_date"/>
+                                    <field name="customs_attachment_ids" widget="many2many_binary" string="المرفقات"/>
+                                </group>
+                            </div>
+                        </div>
+                    </div>
+                </page>
+            </xpath>
+
+            <!-- Line lot and expiry attributes -->
             <xpath expr="//field[@name='invoice_line_ids']/list//field[@name='quantity']" position="after">
                 <field name="product_tracking" column_invisible="True"/>
                 <field name="lot_ids" widget="many2many_tags" optional="show" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
                 <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Vendor Bills List View to display Logistics Stage and Linked PO -->
+    <record id="view_in_invoice_bill_tree_inherit_logistics" model="ir.ui.view">
+        <field name="name">account.move.bill.list.inherit.logistics</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_in_invoice_bill_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='status_in_payment']" position="before">
+                <field name="purchase_order_id" optional="show"/>
+                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('shipment_booking', 'transport_port')" decoration-warning="logistics_stage == 'on_the_way'" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Inherit Vendor Bills Filter to add Logistics Stages filters -->
+    <record id="view_account_bill_filter_inherit_logistics" model="ir.ui.view">
+        <field name="name">account.move.bill.select.inherit.logistics</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_account_bill_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <separator/>
+                <filter string="حجز الشحنة (Shipment Booking)" name="stage_shipment_booking" domain="[('logistics_stage', '=', 'shipment_booking')]"/>
+                <filter string="نقل للميناء / المطار (Transport)" name="stage_transport_port" domain="[('logistics_stage', '=', 'transport_port')]"/>
+                <filter string="الشحنة في الطريق (On the way)" name="stage_on_the_way" domain="[('logistics_stage', '=', 'on_the_way')]"/>
+                <filter string="بدء التخليص (Clearance)" name="stage_clearance" domain="[('logistics_stage', '=', 'clearance')]"/>
+                <filter string="الاستلام المخزني (Received)" name="stage_received" domain="[('logistics_stage', '=', 'received')]"/>
+                <separator/>
+            </xpath>
+            <xpath expr="//group" position="inside">
+                <filter string="مرحلة الشحنة (Logistics Stage)" name="group_by_logistics_stage" context="{'group_by': 'logistics_stage'}"/>
             </xpath>
         </field>
     </record>

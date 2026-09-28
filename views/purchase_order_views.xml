@@ -6,10 +6,10 @@
         <field name="model">purchase.order</field>
         <field name="inherit_id" ref="purchase.purchase_order_form"/>
         <field name="arch" type="xml">
-            <!-- Replace standard statusbar with Logistics Stage pipeline statusbar -->
+            <!-- Replace standard statusbar with Logistics Stage pipeline statusbar up to PI -->
             <xpath expr="//field[@name='state'][@widget='statusbar']" position="replace">
                 <field name="state" invisible="1"/>
-                <field name="logistics_stage" widget="statusbar" statusbar_visible="rfq,po,manufacturing,expiry_check,pi,shipment_booking,transport_port,on_the_way,clearance,received" readonly="1"/>
+                <field name="logistics_stage" widget="statusbar" statusbar_visible="rfq,po,manufacturing,expiry_check,pi" readonly="1"/>
             </xpath>
 
             <!-- Show default Upload Bill widget and Create Bill button in PI Stage -->
@@ -28,16 +28,11 @@
 
             <!-- Header Stage Action Buttons & Print Lot QR Labels Button -->
             <xpath expr="//header" position="inside">
-                <!-- Sequential Logistics Stage Buttons -->
+                <!-- Sequential Logistics Stage Buttons up to PI -->
                 <button name="action_stage_manufacturing" string="بدء التصنيع (Manufacturing)" type="object" class="btn btn-primary" icon="fa-industry" invisible="logistics_stage != 'po' or state in ('draft', 'cancel')"/>
                 <button name="action_stage_expiry_check" string="تدقيق تواريخ التلف (Expiry Check)" type="object" class="btn btn-primary" icon="fa-calendar-check-o" invisible="logistics_stage != 'manufacturing' or state in ('draft', 'cancel')"/>
                 <button name="action_stage_pi" string="فاتورة شراء (PI)" type="object" class="btn btn-primary" icon="fa-file-text-o" invisible="logistics_stage != 'expiry_check' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_shipment_booking" string="حجز الشحنة (Shipment Booking)" type="object" class="btn btn-primary" icon="fa-bookmark" invisible="logistics_stage != 'pi' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_transport_port" string="نقل للميناء / المطار (Transport)" type="object" class="btn btn-primary" icon="fa-truck" invisible="logistics_stage != 'shipment_booking' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_on_the_way" string="الشحنة في الطريق (On the way)" type="object" class="btn btn-primary" icon="fa-plane" invisible="logistics_stage != 'transport_port' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_clearance" string="بدء التخليص (Clearance)" type="object" class="btn btn-primary" icon="fa-shield" invisible="logistics_stage != 'on_the_way' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_received" string="الاستلام المخزني (Received)" type="object" class="btn btn-primary" icon="fa-check-square-o" invisible="logistics_stage != 'clearance' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_previous" string="المرحلة السابقة" type="object" class="btn btn-outline-secondary" icon="fa-arrow-left" title="التراجع إلى المرحلة السابقة" invisible="logistics_stage in ('rfq', 'po', 'received') or state in ('draft', 'cancel')"/>
+                <button name="action_stage_previous" string="المرحلة السابقة" type="object" class="btn btn-outline-secondary" icon="fa-arrow-left" title="التراجع إلى المرحلة السابقة" invisible="logistics_stage in ('rfq', 'po') or state in ('draft', 'cancel')"/>
 
                 <!-- QR Labels Button -->
                 <button name="action_open_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode"/>
@@ -56,80 +51,6 @@
                 </group>
             </xpath>
 
-            <!-- Checklist Tab in Notebook -->
-            <xpath expr="//notebook" position="inside">
-                <page string="قائمة الموافقات والتخليص (Clearance Checklist)" name="clearance_checklist" invisible="logistics_stage == 'rfq'">
-                    <div class="row g-3 p-2">
-                        <!-- 1. MOH Approval -->
-                        <div class="col-md-6 col-12">
-                            <div class="card h-100 shadow-sm border-0 bg-light p-3">
-                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
-                                    <span class="fs-6 fw-bold text-primary">
-                                        <i class="fa fa-heartbeat me-2"/> 1. موافقة وزارة الصحة (MOH Approval)
-                                    </span>
-                                    <field name="moh_approval" widget="boolean_toggle"/>
-                                </div>
-                                <group>
-                                    <field name="moh_ref" placeholder="رقم كتاب / مرجع وزارة الصحة"/>
-                                    <field name="moh_date"/>
-                                    <field name="moh_attachment_ids" widget="many2many_binary" string="المرفقات"/>
-                                </group>
-                            </div>
-                        </div>
-
-                        <!-- 2. MOT Approval -->
-                        <div class="col-md-6 col-12">
-                            <div class="card h-100 shadow-sm border-0 bg-light p-3">
-                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
-                                    <span class="fs-6 fw-bold text-primary">
-                                        <i class="fa fa-building-o me-2"/> 2. موافقة وزارة التجارة (MOT Approval)
-                                    </span>
-                                    <field name="mot_approval" widget="boolean_toggle"/>
-                                </div>
-                                <group>
-                                    <field name="mot_ref" placeholder="رقم إجازة الاستيراد / مرجع التجارة"/>
-                                    <field name="mot_date"/>
-                                    <field name="mot_attachment_ids" widget="many2many_binary" string="المرفقات"/>
-                                </group>
-                            </div>
-                        </div>
-
-                        <!-- 3. Attestation -->
-                        <div class="col-md-6 col-12">
-                            <div class="card h-100 shadow-sm border-0 bg-light p-3">
-                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
-                                    <span class="fs-6 fw-bold text-primary">
-                                        <i class="fa fa-certificate me-2"/> 3. التصديق (Attestation &amp; Legalization)
-                                    </span>
-                                    <field name="attestation_approval" widget="boolean_toggle"/>
-                                </div>
-                                <group>
-                                    <field name="attestation_ref" placeholder="رقم التصديق / شهادة المنشأ"/>
-                                    <field name="attestation_date"/>
-                                    <field name="attestation_attachment_ids" widget="many2many_binary" string="المرفقات"/>
-                                </group>
-                            </div>
-                        </div>
-
-                        <!-- 4. Customs Release -->
-                        <div class="col-md-6 col-12">
-                            <div class="card h-100 shadow-sm border-0 bg-light p-3">
-                                <div class="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
-                                    <span class="fs-6 fw-bold text-primary">
-                                        <i class="fa fa-shield me-2"/> 4. إخراج كمرك (Customs Release)
-                                    </span>
-                                    <field name="customs_release_approval" widget="boolean_toggle"/>
-                                </div>
-                                <group>
-                                    <field name="customs_ref" placeholder="رقم المعاملة / البيان الجمركي"/>
-                                    <field name="customs_date"/>
-                                    <field name="customs_attachment_ids" widget="many2many_binary" string="المرفقات"/>
-                                </group>
-                            </div>
-                        </div>
-                    </div>
-                </page>
-            </xpath>
 
             <!-- Add Lot, Expiry fields, and Redistribute Button in Order Line list view -->
             <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="after">
@@ -162,7 +83,7 @@
             <xpath expr="//field[@name='state']" position="before">
                 <field name="freight_type" optional="show" widget="badge"/>
                 <field name="destination_warehouse_id" optional="show"/>
-                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-warning="logistics_stage in ('pi', 'shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show"/>
+                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-success="logistics_stage == 'pi'" optional="show"/>
             </xpath>
         </field>
     </record>
@@ -176,7 +97,7 @@
             <xpath expr="//field[@name='state']" position="before">
                 <field name="freight_type" optional="show" widget="badge"/>
                 <field name="destination_warehouse_id" optional="show"/>
-                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-warning="logistics_stage in ('pi', 'shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show"/>
+                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-success="logistics_stage == 'pi'" optional="show"/>
             </xpath>
         </field>
     </record>
@@ -192,9 +113,9 @@
                 <filter string="بحرية / Sea Freight" name="freight_sea" domain="[('freight_type', '=', 'sea')]"/>
                 <filter string="جوية / Air Freight" name="freight_air" domain="[('freight_type', '=', 'air')]"/>
                 <separator/>
-                <filter string="بانتظار التخليص الجمركي" name="awaiting_clearance" domain="[('logistics_stage', 'in', ['pi', 'shipment_booking', 'transport_port', 'on_the_way'])]"/>
-                <filter string="جاهز للاستلام المخزني (تخليص)" name="ready_clearance" domain="[('logistics_stage', '=', 'clearance')]"/>
-                <filter string="مستلم مخزنياً" name="received_warehouse" domain="[('logistics_stage', '=', 'received')]"/>
+                <filter string="قيد التصنيع (Manufacturing)" name="stage_manufacturing" domain="[('logistics_stage', '=', 'manufacturing')]"/>
+                <filter string="تدقيق تواريخ التلف (Expiry Check)" name="stage_expiry_check" domain="[('logistics_stage', '=', 'expiry_check')]"/>
+                <filter string="فاتورة شراء (PI)" name="stage_pi" domain="[('logistics_stage', '=', 'pi')]"/>
                 <separator/>
             </xpath>
             <xpath expr="//group" position="inside">

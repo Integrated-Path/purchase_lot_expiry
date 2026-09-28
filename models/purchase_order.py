@@ -241,11 +241,7 @@ class PurchaseOrder(models.Model):
             order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>الاستلام المخزني (Received by warehouse)</b>')))
 
     def action_stage_previous(self):
-        stage_sequence = [
-            'rfq', 'po', 'manufacturing', 'expiry_check', 'pi',
-            'shipment_booking', 'transport_port', 'on_the_way',
-            'clearance', 'received'
-        ]
+        stage_sequence = ['rfq', 'po', 'manufacturing', 'expiry_check', 'pi']
         for order in self:
             if order.logistics_stage in stage_sequence:
                 idx = stage_sequence.index(order.logistics_stage)
@@ -254,6 +250,33 @@ class PurchaseOrder(models.Model):
                     order.logistics_stage = prev_stage
                     stage_name = dict(order._fields['logistics_stage'].selection).get(prev_stage)
                     order.message_post(body=Markup(_('تم التراجع إلى المرحلة السابقة: <b>%s</b>')) % stage_name)
+
+    def _prepare_invoice(self):
+        invoice_vals = super(PurchaseOrder, self)._prepare_invoice()
+        invoice_vals['purchase_order_id'] = self.id
+        invoice_vals.update({
+            'moh_approval': self.moh_approval,
+            'moh_ref': self.moh_ref,
+            'moh_date': self.moh_date,
+            'mot_approval': self.mot_approval,
+            'mot_ref': self.mot_ref,
+            'mot_date': self.mot_date,
+            'attestation_approval': self.attestation_approval,
+            'attestation_ref': self.attestation_ref,
+            'attestation_date': self.attestation_date,
+            'customs_release_approval': self.customs_release_approval,
+            'customs_ref': self.customs_ref,
+            'customs_date': self.customs_date,
+        })
+        if self.moh_attachment_ids:
+            invoice_vals['moh_attachment_ids'] = [(6, 0, self.moh_attachment_ids.ids)]
+        if self.mot_attachment_ids:
+            invoice_vals['mot_attachment_ids'] = [(6, 0, self.mot_attachment_ids.ids)]
+        if self.attestation_attachment_ids:
+            invoice_vals['attestation_attachment_ids'] = [(6, 0, self.attestation_attachment_ids.ids)]
+        if self.customs_attachment_ids:
+            invoice_vals['customs_attachment_ids'] = [(6, 0, self.customs_attachment_ids.ids)]
+        return invoice_vals
 
     def _create_picking(self):
         orders_to_create = self.filtered(lambda po: po.logistics_stage in (

@@ -11,6 +11,7 @@
                 <field name="picking_type_code" invisible="1"/>
                 <field name="purchase_id" invisible="1"/>
                 <field name="purchase_logistics_stage" invisible="1"/>
+                <field name="bill_logistics_stage" invisible="1"/>
                 <field name="is_receipt_locked_for_clearance" invisible="1"/>
                 <!-- Scanning and QR Labels Buttons -->
                 <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan Receipt QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance"/>
@@ -25,17 +26,17 @@
                     <i class="fa fa-lock fa-2x me-3 text-warning" title="الشحنة للعرض فقط" aria-label="الشحنة للعرض فقط"/>
                     <div>
                         <h5 class="mb-1 fw-bold">الشحنة للعرض فقط في المخازن (عرض فقط)</h5>
-                        <span>هذه الشحنة مرتبطة بأمر شراء في مرحلة: <field name="purchase_logistics_stage" class="fw-bold text-dark"/>.<br/>
-                        لا يمكن استلام أو مسح المواد في المخازن إلا بعد وصول أمر الشراء إلى مرحلة <b>التخليص (Clearance)</b>.</span>
+                        <span>هذه الشحنة مرتبطة بأمر شراء وفاتورة مورد في مرحلة: <field name="bill_logistics_stage" class="fw-bold text-dark"/>.<br/>
+                        لا يمكن استلام أو مسح المواد في المخازن إلا بعد وصول فاتورة المورد إلى مرحلة <b>بدء التخليص (Clearance)</b>.</span>
                     </div>
                 </div>
 
                 <!-- Success Banner: Clearance Stage Unlocked for Receiving -->
-                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="status" invisible="state in ('done', 'cancel') or not purchase_id or purchase_logistics_stage != 'clearance'">
+                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="status" invisible="state in ('done', 'cancel') or not purchase_id or is_receipt_locked_for_clearance">
                     <i class="fa fa-unlock-alt fa-2x me-3 text-success" title="متاح للاستلام المخزني" aria-label="متاح للاستلام المخزني"/>
                     <div>
                         <h5 class="mb-1 fw-bold">متاح للاستلام المخزني</h5>
-                        <span>وصلت الشحنة إلى مرحلة <b>التخليص (Clearance)</b>. يمكن الآن للمخازن استلام ومسح المواد واعتماد إذن الاستلام.</span>
+                        <span>وصلت الشحنة إلى مرحلة <b>بدء التخليص (Clearance)</b>. يمكن الآن للمخازن استلام ومسح المواد واعتماد إذن الاستلام.</span>
                     </div>
                 </div>
 
@@ -72,7 +73,7 @@
         <field name="inherit_id" ref="stock.vpicktree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='state']" position="before">
-                <field name="purchase_logistics_stage" widget="badge" decoration-info="purchase_logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-warning="purchase_logistics_stage in ('pi', 'shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="purchase_logistics_stage == 'clearance'" decoration-success="purchase_logistics_stage == 'received'" optional="show"/>
+                <field name="bill_logistics_stage" string="مرحلة الشحنة" widget="badge" decoration-warning="bill_logistics_stage in ('shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="bill_logistics_stage == 'clearance'" decoration-success="bill_logistics_stage == 'received'" optional="show"/>
             </xpath>
         </field>
     </record>
