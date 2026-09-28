@@ -12,6 +12,20 @@
                 <field name="logistics_stage" widget="statusbar" statusbar_visible="rfq,po,manufacturing,expiry_check,pi,shipment_booking,transport_port,on_the_way,clearance,received" readonly="1"/>
             </xpath>
 
+            <!-- Show default Upload Bill widget and Create Bill button in PI Stage -->
+            <xpath expr="//header/widget[@name='purchase_file_uploader']" position="attributes">
+                <attribute name="invisible">state in ('draft', 'sent', 'to approve', 'cancel') or logistics_stage != 'pi'</attribute>
+            </xpath>
+            <xpath expr="//header/widget[@name='purchase_file_uploader']" position="after">
+                <button name="action_create_invoice" string="إنشاء الفاتورة (Create Bill)" type="object" class="btn btn-secondary" invisible="state in ('draft', 'sent', 'to approve', 'cancel') or logistics_stage != 'pi' or invoice_status in ('invoiced')"/>
+            </xpath>
+
+            <!-- Show Bill Matching smart button in PI Stage -->
+            <xpath expr="//button[@name='action_bill_matching']" position="attributes">
+                <attribute name="invisible">state in ('draft', 'sent', 'to approve', 'cancel') or logistics_stage != 'pi'</attribute>
+                <attribute name="groups"></attribute>
+            </xpath>
+
             <!-- Header Stage Action Buttons & Print Lot QR Labels Button -->
             <xpath expr="//header" position="inside">
                 <!-- Sequential Logistics Stage Buttons -->
