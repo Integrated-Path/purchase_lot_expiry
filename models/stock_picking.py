@@ -70,11 +70,11 @@ class StockPicking(models.Model):
 
     def _get_clearance_stage_label(self):
         self.ensure_one()
-        if self.bill_logistics_stage:
-            return dict(self._fields['bill_logistics_stage'].selection).get(self.bill_logistics_stage) or self.bill_logistics_stage
         if self.purchase_id and self.purchase_id.logistics_stage:
             return dict(self.purchase_id._fields['logistics_stage'].selection).get(self.purchase_id.logistics_stage) or self.purchase_id.logistics_stage
-        return _("لم تبدأ مرحلة التخليص بالفاتورة")
+        if self.bill_logistics_stage:
+            return dict(self._fields['bill_logistics_stage'].selection).get(self.bill_logistics_stage) or self.bill_logistics_stage
+        return _("لم تبدأ مرحلة التخليص بأمر الشراء")
 
     def button_validate(self):
         for picking in self:
@@ -82,8 +82,8 @@ class StockPicking(models.Model):
                 stage_label = picking._get_clearance_stage_label()
                 raise UserError(_(
                     "⚠️ لا يمكن استلام هذه الشحنة حالياً في المخازن.\n\n"
-                    "مرحلة الشحنة في فاتورة المورد: [%s].\n"
-                    "الشحنة للعرض والمتابعة فقط، والاستلام المخزني متاح فقط عندما تصل فاتورة المورد إلى مرحلة 'بدء التخليص (Clearance)'."
+                    "مرحلة الشحنة: [%s].\n"
+                    "الشحنة للعرض والمتابعة فقط، والاستلام المخزني متاح فقط عندما يصل أمر الشراء إلى مرحلة 'بدء التخليص (Clearance)'."
                 ) % stage_label)
 
         res = super(StockPicking, self).button_validate()
@@ -93,15 +93,10 @@ class StockPicking(models.Model):
                 po = picking.purchase_id
                 incoming_picks = po.picking_ids.filtered(lambda x: x.picking_type_code == 'incoming')
                 if all(p.state in ('done', 'cancel') for p in incoming_picks):
-                    # Auto-set linked Vendor Bill(s) to 'received' as requested
-                    vendor_bills = po.invoice_ids.filtered(
-                        lambda m: m.move_type == 'in_invoice' and m.state != 'cancel' and m.logistics_stage == 'clearance'
-                    )
-                    for bill in vendor_bills:
-                        bill.logistics_stage = 'received'
-                        bill.message_post(body=_(
-                            "تم استلام الشحنة في المخازن بنجاح بواسطة الإذن: <b>%s</b>، واكتملت مرحلة <b>الاستلام المخزني (Received)</b> تلقائياً."
-                        ) % picking.name)
+                    po.logistics_stage = 'received'
+                    po.message_post(body=_(
+                        "تم استلام الشحنة في المخازن بنجاح بواسطة الإذن: <b>%s</b>، واكتملت مرحلة <b>الاستلام المخزني (Received)</b> تلقائياً."
+                    ) % picking.name)
         return res
 
     def action_open_purchase_lot_qr_wizard(self):

@@ -26,8 +26,8 @@
                     <i class="fa fa-lock fa-2x me-3 text-warning" title="الشحنة للعرض فقط" aria-label="الشحنة للعرض فقط"/>
                     <div>
                         <h5 class="mb-1 fw-bold">الشحنة للعرض فقط في المخازن (عرض فقط)</h5>
-                        <span>هذه الشحنة مرتبطة بأمر شراء وفاتورة مورد في مرحلة: <field name="bill_logistics_stage" class="fw-bold text-dark"/>.<br/>
-                        لا يمكن استلام أو مسح المواد في المخازن إلا بعد وصول فاتورة المورد إلى مرحلة <b>بدء التخليص (Clearance)</b>.</span>
+                        <span>هذه الشحنة مرتبطة بأمر شراء في مرحلة: <field name="purchase_logistics_stage" class="fw-bold text-dark"/>.<br/>
+                        لا يمكن استلام أو مسح المواد في المخازن إلا بعد وصول أمر الشراء إلى مرحلة <b>بدء التخليص (Clearance)</b>.</span>
                     </div>
                 </div>
 
@@ -73,7 +73,7 @@
         <field name="inherit_id" ref="stock.vpicktree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='state']" position="before">
-                <field name="bill_logistics_stage" string="مرحلة الشحنة" widget="badge" decoration-warning="bill_logistics_stage in ('shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="bill_logistics_stage == 'clearance'" decoration-success="bill_logistics_stage == 'received'" optional="show"/>
+                <field name="purchase_logistics_stage" string="مرحلة الشحنة" widget="badge" decoration-warning="purchase_logistics_stage in ('shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="purchase_logistics_stage == 'clearance'" decoration-success="purchase_logistics_stage == 'received'" optional="show"/>
             </xpath>
         </field>
     </record>

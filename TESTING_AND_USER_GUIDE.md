@@ -169,10 +169,15 @@ Every Purchase Order tracks physical and documentary milestones via sequential a
 10. **الاستلام المخزني (Received by warehouse)**: Once warehouse validates the receipt, the purchase order automatically transitions to completed receipt.
 
 ### B. Approvals & Customs Checklist (قائمة الموافقات والتخليص)
-Visible from PO stage and all subsequent stages under a dedicated tab:
+Visible from PO stage and all subsequent stages under a dedicated tab on both the **Purchase Order** and the **Vendor Bill**:
 - **موافقة وزارة الصحة (MOH Approval)**: Checkbox toggle, reference number, approval date, and attachment upload link.
 - **موافقة وزارة التجارة (MOT Approval)**: Checkbox toggle, import license reference, date, and attachment upload link.
 - **التصديق (Attestation & Legalization)**: Checkbox toggle, certificate of origin reference, date, and attachment upload link.
 - **إخراج كمرك (Customs Release)**: Checkbox toggle, customs manifest reference, date, and attachment upload link.
 
-*Note: All checklist items and attachments are optional (non-blocking) and can be filled in progressively as official documents are issued.*
+### C. Purchase Order & Vendor Bill Two-Way Synchronization
+- **Centralized Control**: The logistics pipeline stages (`rfq` through `received`) and action buttons are managed directly on the **Purchase Order**.
+- **Real-Time Synchronization**: The linked **Vendor Bill (`account.move`)** reflects the current logistics stage via a read-only statusbar widget and displays the logistics truck information banner.
+- **Bi-Directional Checklist Sync**: Updates to the clearance checklist (approval toggles, dates, reference numbers, and PDF attachments) on either the Purchase Order or the Vendor Bill automatically synchronize to the other document in real time.
+- **Warehouse Clearance Gate**: The warehouse receipt (`stock.picking`) is locked in view-only mode until the Purchase Order reaches **التخليص (Clearance)**. Once warehouse receiving is validated, both the Purchase Order and linked Vendor Bill advance automatically to **الاستلام المخزني (Received)**.
+

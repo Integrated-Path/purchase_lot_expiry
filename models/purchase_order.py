@@ -147,10 +147,54 @@ class PurchaseOrder(models.Model):
             order.logistics_stage = 'rfq'
         return res
 
+    def _get_linked_vendor_bills(self):
+        """ Return all non-cancelled vendor bills linked to this order """
+        bills = self.env['account.move']
+        for order in self:
+            b1 = order.invoice_ids.filtered(lambda m: m.move_type == 'in_invoice' and m.state != 'cancel')
+            b2 = self.env['account.move'].search([
+                ('purchase_order_id', '=', order.id),
+                ('move_type', '=', 'in_invoice'),
+                ('state', '!=', 'cancel'),
+            ])
+            bills |= (b1 | b2)
+        return bills
+
     def write(self, vals):
         if vals.get('logistics_stage') in ('pi', 'shipment_booking', 'transport_port', 'on_the_way', 'clearance', 'received'):
             self._check_tracked_products_have_lots()
-        return super(PurchaseOrder, self).write(vals)
+        res = super(PurchaseOrder, self).write(vals)
+
+        # Synchronize stage to linked vendor bills
+        if 'logistics_stage' in vals:
+            for order in self:
+                bills = order._get_linked_vendor_bills()
+                if bills:
+                    bills.filtered(lambda b: b.logistics_stage != order.logistics_stage).write({
+                        'logistics_stage': order.logistics_stage
+                    })
+
+        # Synchronize checklist fields to linked vendor bills
+        if not self.env.context.get('skip_checklist_sync'):
+            checklist_fields = {
+                'moh_approval', 'moh_ref', 'moh_date', 'moh_attachment_ids',
+                'mot_approval', 'mot_ref', 'mot_date', 'mot_attachment_ids',
+                'attestation_approval', 'attestation_ref', 'attestation_date', 'attestation_attachment_ids',
+                'customs_release_approval', 'customs_ref', 'customs_date', 'customs_attachment_ids',
+            }
+            updated = checklist_fields & set(vals.keys())
+            if updated:
+                for order in self:
+                    bills = order._get_linked_vendor_bills()
+                    if bills:
+                        bill_vals = {}
+                        for field in updated:
+                            if field.endswith('_attachment_ids'):
+                                bill_vals[field] = [(6, 0, order[field].ids)]
+                            else:
+                                bill_vals[field] = vals[field]
+                        bills.with_context(skip_checklist_sync=True).write(bill_vals)
+        return res
 
     def _check_tracked_products_have_lots(self):
         """
@@ -231,6 +275,11 @@ class PurchaseOrder(models.Model):
             if not order.picking_ids:
                 super(PurchaseOrder, order)._create_picking()
             order._init_incoming_receipt_quantities()
+            incoming = order.picking_ids.filtered(
+                lambda p: p.picking_type_code == 'incoming' and p.state not in ('done', 'cancel')
+            )
+            if incoming:
+                incoming._compute_receipt_locked_for_clearance()
 
     def action_stage_received(self):
         for order in self:
@@ -241,7 +290,11 @@ class PurchaseOrder(models.Model):
             order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>الاستلام المخزني (Received by warehouse)</b>')))
 
     def action_stage_previous(self):
-        stage_sequence = ['rfq', 'po', 'manufacturing', 'expiry_check', 'pi']
+        stage_sequence = [
+            'rfq', 'po', 'manufacturing', 'expiry_check', 'pi',
+            'shipment_booking', 'transport_port', 'on_the_way',
+            'clearance', 'received'
+        ]
         for order in self:
             if order.logistics_stage in stage_sequence:
                 idx = stage_sequence.index(order.logistics_stage)
@@ -250,6 +303,11 @@ class PurchaseOrder(models.Model):
                     order.logistics_stage = prev_stage
                     stage_name = dict(order._fields['logistics_stage'].selection).get(prev_stage)
                     order.message_post(body=Markup(_('تم التراجع إلى المرحلة السابقة: <b>%s</b>')) % stage_name)
+                    incoming = order.picking_ids.filtered(
+                        lambda p: p.picking_type_code == 'incoming' and p.state not in ('done', 'cancel')
+                    )
+                    if incoming:
+                        incoming._compute_receipt_locked_for_clearance()
 
     def _prepare_invoice(self):
         invoice_vals = super(PurchaseOrder, self)._prepare_invoice()

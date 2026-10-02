@@ -3,6 +3,8 @@ from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 from markupsafe import Markup
 
+from .purchase_order import LOGISTICS_STAGES
+
 BILL_LOGISTICS_STAGES = [
     ('shipment_booking', 'حجز الشحنة (Shipment Booking)'),
     ('transport_port', 'نقل للميناء / المطار (Transport)'),
@@ -26,15 +28,22 @@ class AccountMove(models.Model):
         help="Linked Purchase Order for logistics and clearance tracking."
     )
 
-    # Secondary statusbar for Vendor Bill logistics pipeline
+    # Synchronized logistics stage from linked Purchase Order
     logistics_stage = fields.Selection(
-        BILL_LOGISTICS_STAGES,
+        LOGISTICS_STAGES,
         string='مرحلة الشحنة / Logistics Stage',
-        default=False,
-        tracking=True,
+        compute='_compute_logistics_stage',
+        store=True,
+        readonly=True,
         copy=False,
-        help='Tracks the post-PI physical and customs lifecycle on the vendor bill.'
+        tracking=True,
+        help='Tracks the logistics pipeline synchronized with the purchase order.'
     )
+
+    @api.depends('purchase_order_id.logistics_stage')
+    def _compute_logistics_stage(self):
+        for move in self:
+            move.logistics_stage = move.purchase_order_id.logistics_stage if move.purchase_order_id else False
 
     freight_type = fields.Selection(
         related='purchase_order_id.freight_type',
@@ -123,64 +132,54 @@ class AccountMove(models.Model):
                 pos = move.invoice_line_ids.purchase_order_id | move.line_ids.purchase_line_id.order_id
                 move.purchase_order_id = pos[:1] if pos else False
 
+    def write(self, vals):
+        res = super(AccountMove, self).write(vals)
+        if not self.env.context.get('skip_checklist_sync'):
+            checklist_fields = {
+                'moh_approval', 'moh_ref', 'moh_date', 'moh_attachment_ids',
+                'mot_approval', 'mot_ref', 'mot_date', 'mot_attachment_ids',
+                'attestation_approval', 'attestation_ref', 'attestation_date', 'attestation_attachment_ids',
+                'customs_release_approval', 'customs_ref', 'customs_date', 'customs_attachment_ids',
+            }
+            updated = checklist_fields & set(vals.keys())
+            if updated:
+                for move in self:
+                    if move.purchase_order_id:
+                        po_vals = {}
+                        for field in updated:
+                            if field.endswith('_attachment_ids'):
+                                po_vals[field] = [(6, 0, move[field].ids)]
+                            else:
+                                po_vals[field] = vals[field]
+                        move.purchase_order_id.with_context(skip_checklist_sync=True).write(po_vals)
+        return res
+
     def action_stage_shipment_booking(self):
         for move in self:
-            move.logistics_stage = 'shipment_booking'
-            move.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>حجز الشحنة (Shipment Booking)</b>')))
+            if move.purchase_order_id:
+                move.purchase_order_id.action_stage_shipment_booking()
 
     def action_stage_transport_port(self):
         for move in self:
-            move.logistics_stage = 'transport_port'
-            target_desc = _('الميناء البحري') if move.freight_type == 'sea' else _('المطار الجوي')
-            move.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>نقل البضاعة إلى %s (Transport)</b>')) % target_desc)
+            if move.purchase_order_id:
+                move.purchase_order_id.action_stage_transport_port()
 
     def action_stage_on_the_way(self):
         for move in self:
-            move.logistics_stage = 'on_the_way'
-            move.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>الشحنة في الطريق (Shipment on the way)</b>')))
+            if move.purchase_order_id:
+                move.purchase_order_id.action_stage_on_the_way()
 
     def action_stage_clearance(self):
         for move in self:
-            move.logistics_stage = 'clearance'
-            move.message_post(body=Markup(_(
-                'تم تحديث مرحلة الشحنة إلى: <b>بدء التخليص (Clearance)</b>.<br/>'
-                '✅ أصبحت الشحنة الآن متاحة في المخازن للاستلام والمسح والاعتماد.'
-            )))
-            # If linked PO has pickings, unlock for clearance and initialize quantities
             if move.purchase_order_id:
-                if not move.purchase_order_id.picking_ids:
-                    super(models.Model, move.purchase_order_id)._create_picking()
-                move.purchase_order_id._init_incoming_receipt_quantities()
-                incoming = move.purchase_order_id.picking_ids.filtered(
-                    lambda p: p.picking_type_code == 'incoming' and p.state not in ('done', 'cancel')
-                )
-                if incoming:
-                    incoming._compute_receipt_locked_for_clearance()
+                move.purchase_order_id.action_stage_clearance()
 
     def action_stage_received(self):
         for move in self:
             if move.purchase_order_id:
-                incoming = move.purchase_order_id.picking_ids.filtered(
-                    lambda p: p.picking_type_code == 'incoming' and p.state not in ('done', 'cancel')
-                )
-                if incoming:
-                    return move.purchase_order_id.action_view_picking()
-            move.logistics_stage = 'received'
-            move.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>الاستلام المخزني (Received by warehouse)</b>')))
+                return move.purchase_order_id.action_stage_received()
 
     def action_stage_previous(self):
-        stage_sequence = ['shipment_booking', 'transport_port', 'on_the_way', 'clearance']
         for move in self:
-            if move.logistics_stage in stage_sequence:
-                idx = stage_sequence.index(move.logistics_stage)
-                if idx > 0:
-                    prev_stage = stage_sequence[idx - 1]
-                    move.logistics_stage = prev_stage
-                    stage_name = dict(move._fields['logistics_stage'].selection).get(prev_stage)
-                    move.message_post(body=Markup(_('تم التراجع إلى المرحلة السابقة: <b>%s</b>')) % stage_name)
-                    if move.purchase_order_id:
-                        incoming = move.purchase_order_id.picking_ids.filtered(
-                            lambda p: p.picking_type_code == 'incoming' and p.state not in ('done', 'cancel')
-                        )
-                        if incoming:
-                            incoming._compute_receipt_locked_for_clearance()
+            if move.purchase_order_id:
+                move.purchase_order_id.action_stage_previous()
