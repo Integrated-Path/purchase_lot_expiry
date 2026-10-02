@@ -6,6 +6,9 @@ from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 
 
+from .purchase_order import LOGISTICS_STAGES
+
+
 class StockPicking(models.Model):
     _inherit = 'stock.picking'
 
@@ -25,13 +28,7 @@ class StockPicking(models.Model):
         readonly=True
     )
     bill_logistics_stage = fields.Selection(
-        selection=[
-            ('shipment_booking', 'حجز الشحنة (Shipment Booking)'),
-            ('transport_port', 'نقل للميناء / المطار (Transport)'),
-            ('on_the_way', 'الشحنة في الطريق (On the way)'),
-            ('clearance', 'بدء التخليص (Clearance)'),
-            ('received', 'الاستلام المخزني (Received)'),
-        ],
+        LOGISTICS_STAGES,
         string='مرحلة الشحنة (الفاتورة) / Bill Logistics Stage',
         compute='_compute_bill_logistics_stage',
         store=True,
@@ -46,13 +43,14 @@ class StockPicking(models.Model):
 
     @api.depends('purchase_id.invoice_ids.logistics_stage', 'purchase_id.invoice_ids.state')
     def _compute_bill_logistics_stage(self):
+        valid_keys = set(dict(LOGISTICS_STAGES).keys())
         for picking in self:
             stage = False
             if picking.purchase_id:
                 active_bills = picking.purchase_id.invoice_ids.filtered(
                     lambda m: m.move_type == 'in_invoice' and m.state != 'cancel' and m.logistics_stage
                 )
-                if active_bills:
+                if active_bills and active_bills[0].logistics_stage in valid_keys:
                     stage = active_bills[0].logistics_stage
             picking.bill_logistics_stage = stage
 
