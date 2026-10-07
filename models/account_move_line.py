@@ -6,6 +6,11 @@ from datetime import datetime
 class AccountMoveLine(models.Model):
     _inherit = 'account.move.line'
 
+    purchase_type = fields.Selection(
+        related='move_id.purchase_type',
+        string='Purchase Type',
+        readonly=True
+    )
     product_tracking = fields.Selection(
         related='product_id.tracking',
         string='Product Tracking',
@@ -31,17 +36,32 @@ class AccountMoveLine(models.Model):
         help="Formatted list of expiry dates for assigned lot(s)."
     )
 
-    @api.depends('purchase_line_id', 'purchase_line_id.lot_ids')
+    @api.depends(
+        'purchase_line_id',
+        'purchase_line_id.lot_ids',
+        'purchase_line_id.order_id.purchase_type',
+        'move_id.purchase_order_id.purchase_type'
+    )
     def _compute_lot_ids(self):
         if hasattr(super(), '_compute_lot_ids'):
             super()._compute_lot_ids()
         for line in self:
+            if line.purchase_type == 'internal_po':
+                continue
             if not line.lot_ids and line.purchase_line_id and line.purchase_line_id.lot_ids:
                 line.lot_ids = [(6, 0, line.purchase_line_id.lot_ids.ids)]
 
-    @api.depends('lot_ids', 'lot_ids.expiration_date')
+    @api.depends(
+        'lot_ids',
+        'lot_ids.expiration_date',
+        'purchase_line_id.order_id.purchase_type',
+        'move_id.purchase_order_id.purchase_type'
+    )
     def _compute_lot_expiry_display(self):
         for line in self:
+            if line.purchase_type == 'internal_po':
+                line.lot_expiry_display = False
+                continue
             expiries = []
             for lot in line.lot_ids:
                 if lot.expiration_date:

@@ -25,4 +25,28 @@
     <record id="base.group_system" model="res.groups">
         <field name="implied_ids" eval="[(4, ref('group_mobile_qr_scan'))]"/>
     </record>
+    
+    <record id="rule_purchase_order_journal_access" model="ir.rule">
+        <field name="name">Restrict PO by Journal Access</field>
+        <field name="model_id" ref="purchase.model_purchase_order"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">['|', ('purchase_journal', '=', False), ('purchase_journal.allowed_user_ids', 'in', [user.id])]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
+
+    <record id="rule_account_move_purchase_journal_access" model="ir.rule">
+        <field name="name">Restrict Vendor Bills by Journal Access</field>
+        <field name="model_id" ref="account.model_account_move"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">['|', ('move_type', 'not in', ('in_invoice', 'in_refund')), '|', ('purchase_journal', '=', False), ('purchase_journal.allowed_user_ids', 'in', [user.id])]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+
 </odoo>

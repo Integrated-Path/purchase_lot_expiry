@@ -35,6 +35,11 @@ class PurchaseOrderLineLot(models.Model):
 class PurchaseOrderLine(models.Model):
     _inherit = 'purchase.order.line'
 
+    purchase_type = fields.Selection(
+        related='order_id.purchase_type',
+        string='Purchase Type',
+        readonly=True
+    )
     product_tracking = fields.Selection(
         related='product_id.tracking',
         string='Product Tracking',
@@ -73,16 +78,21 @@ class PurchaseOrderLine(models.Model):
         compute='_compute_show_redistribute_button'
     )
 
-    @api.depends('lot_ids', 'product_qty', 'product_tracking')
+    @api.depends('lot_ids', 'product_qty', 'product_tracking', 'purchase_type')
     def _compute_show_redistribute_button(self):
         for line in self:
             line.show_redistribute_button = (
-                line.product_tracking in ('lot', 'serial') and len(line.lot_ids) >= 2
+                line.purchase_type != 'internal_po'
+                and line.product_tracking in ('lot', 'serial')
+                and len(line.lot_ids) >= 2
             )
 
-    @api.depends('lot_ids', 'lot_ids.expiration_date')
+    @api.depends('lot_ids', 'lot_ids.expiration_date', 'purchase_type')
     def _compute_expiration_date(self):
         for line in self:
+            if line.purchase_type == 'internal_po':
+                line.expiration_date = False
+                continue
             dates = [lot.expiration_date for lot in line.lot_ids if lot.expiration_date]
             if dates:
                 line.expiration_date = dates[0]
@@ -91,13 +101,18 @@ class PurchaseOrderLine(models.Model):
 
     @api.onchange('expiration_date')
     def _onchange_expiration_date(self):
+        if self.purchase_type == 'internal_po':
+            return
         if self.expiration_date and self.lot_ids:
             for lot in self.lot_ids:
                 lot.expiration_date = self.expiration_date
 
-    @api.depends('lot_ids', 'lot_ids.expiration_date', 'expiration_date')
+    @api.depends('lot_ids', 'lot_ids.expiration_date', 'expiration_date', 'purchase_type')
     def _compute_lot_expiry_display(self):
         for line in self:
+            if line.purchase_type == 'internal_po':
+                line.lot_expiry_display = False
+                continue
             expiries = []
             for lot in line.lot_ids:
                 if lot.expiration_date:
@@ -111,10 +126,12 @@ class PurchaseOrderLine(models.Model):
                 expiries.append(exp_str)
             line.lot_expiry_display = ", ".join(sorted(expiries)) if expiries else ""
 
-    @api.onchange('lot_ids', 'product_qty')
+    @api.onchange('lot_ids', 'product_qty', 'purchase_type')
     def _onchange_lot_ids_sync_pol_lots(self):
         """ Automatically synchronize pol_lot_ids and distribute product_qty evenly if newly assigned. """
         for line in self:
+            if line.purchase_type == 'internal_po':
+                continue
             if not line.lot_ids:
                 line.pol_lot_ids = [(5, 0, 0)]
                 continue
@@ -133,6 +150,8 @@ class PurchaseOrderLine(models.Model):
 
     def action_open_lot_redistribution_wizard(self):
         self.ensure_one()
+        if self.purchase_type == 'internal_po':
+            raise UserError(_("Lot redistribution is not available for internal purchase orders."))
         if len(self.lot_ids) < 2:
             raise UserError(_("Redistribution requires at least 2 assigned lots/serial numbers."))
         
@@ -165,6 +184,8 @@ class PurchaseOrderLine(models.Model):
 
     def action_open_lot_qr_wizard(self):
         self.ensure_one()
+        if self.purchase_type == 'internal_po':
+            raise UserError(_("QR label generation is not available for internal purchase orders."))
         if not self.lot_ids:
             raise UserError(_("No Lot/Serial numbers assigned to this purchase order line."))
         return self.order_id.action_open_lot_qr_wizard()
@@ -172,6 +193,8 @@ class PurchaseOrderLine(models.Model):
     def _sync_pol_lot_ids_default(self):
         """ Helper to sync pol_lot_ids synchronously if changed in backend code """
         for line in self:
+            if line.purchase_type == 'internal_po':
+                continue
             if not line.lot_ids:
                 line.pol_lot_ids.unlink()
                 continue
@@ -200,6 +223,8 @@ class PurchaseOrderLine(models.Model):
             return
 
         for line in self:
+            if line.purchase_type == 'internal_po':
+                continue
             if line.order_id.state in ('purchase', 'done'):
                 # Check for done pickings
                 done_pickings = line.move_ids.mapped('picking_id').filtered(lambda p: p.state == 'done')
@@ -224,11 +249,14 @@ class PurchaseOrderLine(models.Model):
                     )
 
     def write(self, vals):
-        self._check_modification_safety(vals)
+        external_lines = self.filtered(lambda line: line.purchase_type != 'internal_po')
+        if external_lines:
+            external_lines._check_modification_safety(vals)
         res = super(PurchaseOrderLine, self).write(vals)
+        external_lines = self.filtered(lambda line: line.purchase_type != 'internal_po')
         sync_needed_fields = {'expiration_date', 'lot_ids', 'product_qty', 'pol_lot_ids'}
-        if sync_needed_fields & set(vals.keys()):
-            for line in self:
+        if external_lines and (sync_needed_fields & set(vals.keys())):
+            for line in external_lines:
                 if line.expiration_date and line.lot_ids:
                     lots_to_update = line.lot_ids.filtered(
                         lambda l: not l.expiration_date or l.expiration_date != line.expiration_date
@@ -242,6 +270,8 @@ class PurchaseOrderLine(models.Model):
 
     def unlink(self):
         for line in self:
+            if line.order_id and line.order_id.purchase_type == 'internal_po':
+                continue
             if line.order_id.state in ('purchase', 'done'):
                 done_pickings = line.move_ids.mapped('picking_id').filtered(lambda p: p.state == 'done')
                 if done_pickings:
@@ -254,6 +284,8 @@ class PurchaseOrderLine(models.Model):
     def _update_draft_vendor_bills(self):
         """ Propagate lot changes to linked draft vendor bill lines """
         for line in self:
+            if line.purchase_type == 'internal_po':
+                continue
             draft_bill_lines = line.invoice_lines.filtered(lambda l: l.move_id.state == 'draft')
             if draft_bill_lines:
                 draft_bill_lines.write({'lot_ids': [(6, 0, line.lot_ids.ids)]})
@@ -262,6 +294,8 @@ class PurchaseOrderLine(models.Model):
         """ Update stock.move and stock.move.line for stock pickings linked to this line,
             ensuring Done quantity starts at 0.0 to await QR scan fulfillment. """
         for line in self:
+            if line.purchase_type == 'internal_po':
+                continue
             if not line.move_ids:
                 continue
             for move in line.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
@@ -324,6 +358,8 @@ class PurchaseOrderLine(models.Model):
         return moves
 
     def _prepare_account_move_line(self, move=False):
+        if self.order_id and self.order_id.purchase_type == 'internal_po':
+            return super(PurchaseOrderLine, self)._prepare_account_move_line(move=move)
         res = super(PurchaseOrderLine, self)._prepare_account_move_line(move=move)
         if self.lot_ids:
             res['lot_ids'] = [(6, 0, self.lot_ids.ids)]

@@ -6,46 +6,50 @@
         <field name="model">purchase.order</field>
         <field name="inherit_id" ref="purchase.purchase_order_form"/>
         <field name="arch" type="xml">
-            <!-- Replace standard statusbar with Logistics Stage pipeline statusbar -->
-            <xpath expr="//field[@name='state'][@widget='statusbar']" position="replace">
-                <field name="state" invisible="1"/>
-                <field name="logistics_stage" widget="statusbar" statusbar_visible="rfq,po,manufacturing,expiry_check,pi,shipment_booking,transport_port,on_the_way,clearance,received" readonly="1"/>
+            <xpath expr="//field[@name='fiscal_position_id']" position="after">
+                <field name="purchase_journal"/>
+            </xpath>
+            <xpath expr="//sheet/group[1]" position="before">
+                <group>
+                    <field name="purchase_type" readonly="state == 'purchase'"/>
+                </group>
+            </xpath>
+            <xpath expr="//button[@name='button_confirm']" position="after">
+                <button string="تأكيد تام" name="action_confirm_pick" type="object" class="btn-primary" invisible="state != 'draft' or purchase_type != 'internal_po'"/>
             </xpath>
 
-            <!-- Show default Upload Bill widget and Create Bill button in PI Stage -->
-            <xpath expr="//header/widget[@name='purchase_file_uploader']" position="attributes">
-                <attribute name="invisible">state in ('draft', 'sent', 'to approve', 'cancel') or logistics_stage != 'pi'</attribute>
+            <xpath expr="//field[@name='state'][@widget='statusbar']" position="attributes">
+                <attribute name="invisible">purchase_type != 'internal_po'</attribute>
             </xpath>
+            <xpath expr="//field[@name='state'][@widget='statusbar']" position="after">
+                <field name="logistics_stage" widget="statusbar" statusbar_visible="rfq,po,manufacturing,expiry_check,pi,shipment_booking,transport_port,on_the_way,clearance,received" readonly="1" invisible="purchase_type == 'internal_po'"/>
+            </xpath>
+
             <xpath expr="//header/widget[@name='purchase_file_uploader']" position="after">
-                <button name="action_create_invoice" string="إنشاء الفاتورة (Create Bill)" type="object" class="btn btn-secondary" invisible="state in ('draft', 'sent', 'to approve', 'cancel') or logistics_stage != 'pi' or invoice_status in ('invoiced')"/>
-            </xpath>
-
-            <!-- Show Bill Matching smart button in PI Stage -->
-            <xpath expr="//button[@name='action_bill_matching']" position="attributes">
-                <attribute name="invisible">state in ('draft', 'sent', 'to approve', 'cancel') or logistics_stage != 'pi'</attribute>
-                <attribute name="groups"></attribute>
+                <button name="action_create_invoice" string="إنشاء الفاتورة (Create Bill)" type="object" class="btn btn-secondary" invisible="purchase_type == 'internal_po' or state in ('draft', 'sent', 'to approve', 'cancel') or logistics_stage != 'pi' or invoice_status in ('invoiced')"/>
             </xpath>
 
             <!-- Header Stage Action Buttons & Print Lot QR Labels Button -->
             <xpath expr="//header" position="inside">
+                <field name="purchase_type" invisible="1"/>
                 <!-- Sequential Logistics Stage Buttons -->
-                <button name="action_stage_manufacturing" string="بدء التصنيع (Manufacturing)" type="object" class="btn btn-primary" icon="fa-industry" invisible="logistics_stage != 'po' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_expiry_check" string="تدقيق تواريخ التلف (Expiry Check)" type="object" class="btn btn-primary" icon="fa-calendar-check-o" invisible="logistics_stage != 'manufacturing' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_pi" string="فاتورة شراء (PI)" type="object" class="btn btn-primary" icon="fa-file-text-o" invisible="logistics_stage != 'expiry_check' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_shipment_booking" string="حجز الشحنة (Shipment Booking)" type="object" class="btn btn-primary" icon="fa-bookmark" invisible="logistics_stage != 'pi' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_transport_port" string="نقل للميناء / المطار (Transport)" type="object" class="btn btn-primary" icon="fa-truck" invisible="logistics_stage != 'shipment_booking' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_on_the_way" string="الشحنة في الطريق (On the way)" type="object" class="btn btn-primary" icon="fa-plane" invisible="logistics_stage != 'transport_port' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_clearance" string="بدء التخليص (Clearance)" type="object" class="btn btn-primary" icon="fa-shield" invisible="logistics_stage != 'on_the_way' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_received" string="الاستلام المخزني (Received)" type="object" class="btn btn-primary" icon="fa-check-square-o" invisible="logistics_stage != 'clearance' or state in ('draft', 'cancel')"/>
-                <button name="action_stage_previous" string="المرحلة السابقة" type="object" class="btn btn-outline-secondary" icon="fa-arrow-left" title="التراجع إلى المرحلة السابقة" invisible="logistics_stage in ('rfq', 'po', 'received') or state in ('draft', 'cancel')"/>
+                <button name="action_stage_manufacturing" string="بدء التصنيع (Manufacturing)" type="object" class="btn btn-primary" icon="fa-industry" invisible="purchase_type == 'internal_po' or logistics_stage != 'po' or state in ('draft', 'cancel')"/>
+                <button name="action_stage_expiry_check" string="تدقيق تواريخ التلف (Expiry Check)" type="object" class="btn btn-primary" icon="fa-calendar-check-o" invisible="purchase_type == 'internal_po' or logistics_stage != 'manufacturing' or state in ('draft', 'cancel')"/>
+                <button name="action_stage_pi" string="فاتورة شراء (PI)" type="object" class="btn btn-primary" icon="fa-file-text-o" invisible="purchase_type == 'internal_po' or logistics_stage != 'expiry_check' or state in ('draft', 'cancel')"/>
+                <button name="action_stage_shipment_booking" string="حجز الشحنة (Shipment Booking)" type="object" class="btn btn-primary" icon="fa-bookmark" invisible="purchase_type == 'internal_po' or logistics_stage != 'pi' or state in ('draft', 'cancel')"/>
+                <button name="action_stage_transport_port" string="نقل للميناء / المطار (Transport)" type="object" class="btn btn-primary" icon="fa-truck" invisible="purchase_type == 'internal_po' or logistics_stage != 'shipment_booking' or state in ('draft', 'cancel')"/>
+                <button name="action_stage_on_the_way" string="الشحنة في الطريق (On the way)" type="object" class="btn btn-primary" icon="fa-plane" invisible="purchase_type == 'internal_po' or logistics_stage != 'transport_port' or state in ('draft', 'cancel')"/>
+                <button name="action_stage_clearance" string="بدء التخليص (Clearance)" type="object" class="btn btn-primary" icon="fa-shield" invisible="purchase_type == 'internal_po' or logistics_stage != 'on_the_way' or state in ('draft', 'cancel')"/>
+                <button name="action_stage_received" string="الاستلام المخزني (Received)" type="object" class="btn btn-primary" icon="fa-check-square-o" invisible="purchase_type == 'internal_po' or logistics_stage != 'clearance' or state in ('draft', 'cancel')"/>
+                <button name="action_stage_previous" string="المرحلة السابقة" type="object" class="btn btn-outline-secondary" icon="fa-arrow-left" title="التراجع إلى المرحلة السابقة" invisible="purchase_type == 'internal_po' or logistics_stage in ('rfq', 'po', 'received') or state in ('draft', 'cancel')"/>
 
                 <!-- QR Labels Button -->
-                <button name="action_open_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode"/>
+                <button name="action_open_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="purchase_type == 'internal_po'"/>
             </xpath>
 
             <!-- Freight Type & Destination Warehouse Section -->
             <xpath expr="//sheet/group[1]" position="after">
-                <group string="بيانات الشحن والمستودع المستلم (Logistics &amp; Warehouse Destination)">
+                <group string="بيانات الشحن والمستودع المستلم (Logistics &amp; Warehouse Destination)" invisible="purchase_type == 'internal_po'">
                     <group>
                         <field name="freight_type" widget="radio" options="{'horizontal': true}"/>
                     </group>
@@ -58,7 +62,7 @@
 
             <!-- Checklist Tab in Notebook -->
             <xpath expr="//notebook" position="inside">
-                <page string="قائمة الموافقات والتخليص (Clearance Checklist)" name="clearance_checklist" invisible="logistics_stage == 'rfq'">
+                <page string="قائمة الموافقات والتخليص (Clearance Checklist)" name="clearance_checklist" invisible="purchase_type == 'internal_po' or logistics_stage == 'rfq'">
                     <div class="row g-3 p-2">
                         <!-- 1. MOH Approval -->
                         <div class="col-md-6 col-12">
@@ -133,22 +137,24 @@
 
             <!-- Add Lot, Expiry fields, and Redistribute Button in Order Line list view -->
             <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="after">
+                <field name="purchase_type" column_invisible="True"/>
                 <field name="product_tracking" column_invisible="True"/>
                 <field name="show_redistribute_button" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="expiration_date" optional="hide" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>
-                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="not show_redistribute_button" string="Redistribute"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
+                <field name="expiration_date" optional="hide" invisible="parent.purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
+                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="parent.purchase_type == 'internal_po' or not show_redistribute_button" string="Redistribute"/>
             </xpath>
 
             <!-- Add Lot and Expiry fields in Order Line form view -->
             <xpath expr="//field[@name='order_line']/form//field[@name='price_unit']" position="after">
+                <field name="purchase_type" invisible="1"/>
                 <field name="product_tracking" invisible="1"/>
                 <field name="show_redistribute_button" invisible="1"/>
-                <field name="lot_ids" widget="many2many_tags" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="expiration_date" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" invisible="not product_tracking or product_tracking == 'none'"/>
-                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="not show_redistribute_button" string="Redistribute Lot Qty" class="btn btn-secondary mt-2"/>
+                <field name="lot_ids" widget="many2many_tags" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
+                <field name="expiration_date" optional="hide" invisible="parent.purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
+                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="parent.purchase_type == 'internal_po' or not show_redistribute_button" string="Redistribute Lot Qty" class="btn btn-secondary mt-2"/>
             </xpath>
         </field>
     </record>
@@ -160,9 +166,10 @@
         <field name="inherit_id" ref="purchase.purchase_order_kpis_tree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='state']" position="before">
-                <field name="freight_type" optional="show" widget="badge"/>
-                <field name="destination_warehouse_id" optional="show"/>
-                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-warning="logistics_stage in ('pi', 'shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show"/>
+                <field name="purchase_type" column_invisible="True"/>
+                <field name="freight_type" optional="show" widget="badge" invisible="purchase_type == 'internal_po'"/>
+                <field name="destination_warehouse_id" optional="show" invisible="purchase_type == 'internal_po'"/>
+                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-warning="logistics_stage in ('pi', 'shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show" invisible="purchase_type == 'internal_po'"/>
             </xpath>
         </field>
     </record>
@@ -174,9 +181,10 @@
         <field name="inherit_id" ref="purchase.purchase_order_view_tree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='state']" position="before">
-                <field name="freight_type" optional="show" widget="badge"/>
-                <field name="destination_warehouse_id" optional="show"/>
-                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-warning="logistics_stage in ('pi', 'shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show"/>
+                <field name="purchase_type" column_invisible="True"/>
+                <field name="freight_type" optional="show" widget="badge" invisible="purchase_type == 'internal_po'"/>
+                <field name="destination_warehouse_id" optional="show" invisible="purchase_type == 'internal_po'"/>
+                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('po', 'manufacturing', 'expiry_check')" decoration-warning="logistics_stage in ('pi', 'shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show" invisible="purchase_type == 'internal_po'"/>
             </xpath>
         </field>
     </record>
@@ -189,27 +197,27 @@
         <field name="arch" type="xml">
             <xpath expr="//search" position="inside">
                 <separator/>
-                <filter string="بحرية / Sea Freight" name="freight_sea" domain="[('freight_type', '=', 'sea')]"/>
-                <filter string="جوية / Air Freight" name="freight_air" domain="[('freight_type', '=', 'air')]"/>
+                <filter string="بحرية / Sea Freight" name="freight_sea" domain="[('purchase_type', '=', 'external_po'), ('freight_type', '=', 'sea')]"/>
+                <filter string="جوية / Air Freight" name="freight_air" domain="[('purchase_type', '=', 'external_po'), ('freight_type', '=', 'air')]"/>
                 <separator/>
-                <filter string="قيد التصنيع (Manufacturing)" name="stage_manufacturing" domain="[('logistics_stage', '=', 'manufacturing')]"/>
-                <filter string="تدقيق تواريخ التلف (Expiry Check)" name="stage_expiry_check" domain="[('logistics_stage', '=', 'expiry_check')]"/>
-                <filter string="فاتورة شراء (PI)" name="stage_pi" domain="[('logistics_stage', '=', 'pi')]"/>
-                <filter string="حجز الشحنة (Shipment Booking)" name="stage_shipment_booking" domain="[('logistics_stage', '=', 'shipment_booking')]"/>
-                <filter string="نقل للميناء / المطار (Transport)" name="stage_transport_port" domain="[('logistics_stage', '=', 'transport_port')]"/>
-                <filter string="الشحنة في الطريق (On the way)" name="stage_on_the_way" domain="[('logistics_stage', '=', 'on_the_way')]"/>
-                <filter string="بدء التخليص (Clearance)" name="stage_clearance" domain="[('logistics_stage', '=', 'clearance')]"/>
-                <filter string="الاستلام المخزني (Received)" name="stage_received" domain="[('logistics_stage', '=', 'received')]"/>
+                <filter string="قيد التصنيع (Manufacturing)" name="stage_manufacturing" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'manufacturing')]"/>
+                <filter string="تدقيق تواريخ التلف (Expiry Check)" name="stage_expiry_check" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'expiry_check')]"/>
+                <filter string="فاتورة شراء (PI)" name="stage_pi" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'pi')]"/>
+                <filter string="حجز الشحنة (Shipment Booking)" name="stage_shipment_booking" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'shipment_booking')]"/>
+                <filter string="نقل للميناء / المطار (Transport)" name="stage_transport_port" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'transport_port')]"/>
+                <filter string="الشحنة في الطريق (On the way)" name="stage_on_the_way" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'on_the_way')]"/>
+                <filter string="بدء التخليص (Clearance)" name="stage_clearance" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'clearance')]"/>
+                <filter string="الاستلام المخزني (Received)" name="stage_received" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'received')]"/>
                 <separator/>
-                <filter string="بانتظار التخليص الجمركي" name="awaiting_clearance" domain="[('logistics_stage', 'in', ['shipment_booking', 'transport_port', 'on_the_way'])]"/>
-                <filter string="جاهز للاستلام المخزني (تخليص)" name="ready_clearance" domain="[('logistics_stage', '=', 'clearance')]"/>
-                <filter string="مستلم مخزنياً" name="received_warehouse" domain="[('logistics_stage', '=', 'received')]"/>
+                <filter string="بانتظار التخليص الجمركي" name="awaiting_clearance" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', 'in', ['shipment_booking', 'transport_port', 'on_the_way'])]"/>
+                <filter string="جاهز للاستلام المخزني (تخليص)" name="ready_clearance" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'clearance')]"/>
+                <filter string="مستلم مخزنياً" name="received_warehouse" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'received')]"/>
                 <separator/>
             </xpath>
             <xpath expr="//group" position="inside">
-                <filter string="نوع الشحن (Freight Type)" name="group_by_freight_type" context="{'group_by': 'freight_type'}"/>
-                <filter string="مرحلة الشحنة (Logistics Stage)" name="group_by_logistics_stage" context="{'group_by': 'logistics_stage'}"/>
-                <filter string="المخزن المستلم (Warehouse)" name="group_by_destination_warehouse" context="{'group_by': 'destination_warehouse_id'}"/>
+                <filter string="نوع الشحن (Freight Type)" name="group_by_freight_type" domain="[('purchase_type', '=', 'external_po')]" context="{'group_by': 'freight_type'}"/>
+                <filter string="مرحلة الشحنة (Logistics Stage)" name="group_by_logistics_stage" domain="[('purchase_type', '=', 'external_po')]" context="{'group_by': 'logistics_stage'}"/>
+                <filter string="المخزن المستلم (Warehouse)" name="group_by_destination_warehouse" domain="[('purchase_type', '=', 'external_po')]" context="{'group_by': 'destination_warehouse_id'}"/>
             </xpath>
         </field>
     </record>
@@ -221,12 +229,13 @@
         <field name="inherit_id" ref="purchase.purchase_order_line_tree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='product_qty']" position="after">
+                <field name="purchase_type" column_invisible="True"/>
                 <field name="product_tracking" column_invisible="True"/>
                 <field name="show_redistribute_button" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="expiration_date" optional="hide" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>
-                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="not show_redistribute_button"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="expiration_date" optional="hide" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="purchase_type == 'internal_po' or not show_redistribute_button"/>
             </xpath>
         </field>
     </record>
@@ -238,13 +247,15 @@
         <field name="inherit_id" ref="purchase.purchase_order_line_form2"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='price_unit']" position="after">
+                <field name="purchase_type" invisible="1"/>
                 <field name="product_tracking" invisible="1"/>
                 <field name="show_redistribute_button" invisible="1"/>
-                <field name="lot_ids" widget="many2many_tags" domain="[('product_id', '=', product_id)]" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="expiration_date" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" invisible="not product_tracking or product_tracking == 'none'"/>
-                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="not show_redistribute_button" string="Redistribute Lot Qty" class="btn btn-secondary mt-2"/>
+                <field name="lot_ids" widget="many2many_tags" domain="[('product_id', '=', product_id)]" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="expiration_date" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="purchase_type == 'internal_po' or not show_redistribute_button" string="Redistribute Lot Qty" class="btn btn-secondary mt-2"/>
             </xpath>
         </field>
     </record>
+
 </odoo>

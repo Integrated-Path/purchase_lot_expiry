@@ -13,7 +13,6 @@ BILL_LOGISTICS_STAGES = [
     ('received', 'الاستلام المخزني (Received)'),
 ]
 
-
 class AccountMove(models.Model):
     _inherit = 'account.move'
 
@@ -26,6 +25,17 @@ class AccountMove(models.Model):
         readonly=False,
         copy=False,
         help="Linked Purchase Order for logistics and clearance tracking."
+    )
+    purchase_type = fields.Selection(
+        related='purchase_order_id.purchase_type',
+        string='Purchase Type',
+        readonly=True
+    )
+    purchase_journal = fields.Many2one(
+        related='purchase_order_id.purchase_journal',
+        string='Purchase Journal',
+        store=True,
+        readonly=True
     )
 
     # Synchronized logistics stage from linked Purchase Order
@@ -40,10 +50,13 @@ class AccountMove(models.Model):
         help='Tracks the logistics pipeline synchronized with the purchase order.'
     )
 
-    @api.depends('purchase_order_id.logistics_stage')
+    @api.depends('purchase_order_id.logistics_stage', 'purchase_order_id.purchase_type')
     def _compute_logistics_stage(self):
         for move in self:
-            move.logistics_stage = move.purchase_order_id.logistics_stage if move.purchase_order_id else False
+            if move.purchase_order_id and move.purchase_order_id.purchase_type == 'internal_po':
+                move.logistics_stage = False
+            else:
+                move.logistics_stage = move.purchase_order_id.logistics_stage if move.purchase_order_id else False
 
     freight_type = fields.Selection(
         related='purchase_order_id.freight_type',
@@ -134,6 +147,7 @@ class AccountMove(models.Model):
 
     def write(self, vals):
         res = super(AccountMove, self).write(vals)
+        
         if not self.env.context.get('skip_checklist_sync'):
             checklist_fields = {
                 'moh_approval', 'moh_ref', 'moh_date', 'moh_attachment_ids',
@@ -144,7 +158,7 @@ class AccountMove(models.Model):
             updated = checklist_fields & set(vals.keys())
             if updated:
                 for move in self:
-                    if move.purchase_order_id:
+                    if move.purchase_order_id and move.purchase_order_id.purchase_type != 'internal_po':
                         po_vals = {}
                         for field in updated:
                             if field.endswith('_attachment_ids'):
@@ -156,30 +170,30 @@ class AccountMove(models.Model):
 
     def action_stage_shipment_booking(self):
         for move in self:
-            if move.purchase_order_id:
+            if move.purchase_order_id and move.purchase_order_id.purchase_type != 'internal_po':
                 move.purchase_order_id.action_stage_shipment_booking()
 
     def action_stage_transport_port(self):
         for move in self:
-            if move.purchase_order_id:
+            if move.purchase_order_id and move.purchase_order_id.purchase_type != 'internal_po':
                 move.purchase_order_id.action_stage_transport_port()
 
     def action_stage_on_the_way(self):
         for move in self:
-            if move.purchase_order_id:
+            if move.purchase_order_id and move.purchase_order_id.purchase_type != 'internal_po':
                 move.purchase_order_id.action_stage_on_the_way()
 
     def action_stage_clearance(self):
         for move in self:
-            if move.purchase_order_id:
+            if move.purchase_order_id and move.purchase_order_id.purchase_type != 'internal_po':
                 move.purchase_order_id.action_stage_clearance()
 
     def action_stage_received(self):
         for move in self:
-            if move.purchase_order_id:
+            if move.purchase_order_id and move.purchase_order_id.purchase_type != 'internal_po':
                 return move.purchase_order_id.action_stage_received()
 
     def action_stage_previous(self):
         for move in self:
-            if move.purchase_order_id:
+            if move.purchase_order_id and move.purchase_order_id.purchase_type != 'internal_po':
                 move.purchase_order_id.action_stage_previous()

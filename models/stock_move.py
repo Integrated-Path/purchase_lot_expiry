@@ -6,6 +6,11 @@ from datetime import datetime
 class StockMove(models.Model):
     _inherit = 'stock.move'
 
+    purchase_type = fields.Selection(
+        related='purchase_line_id.order_id.purchase_type',
+        string='Purchase Type',
+        readonly=True
+    )
     product_tracking = fields.Selection(
         related='product_id.tracking',
         string='Product Tracking',
@@ -18,9 +23,17 @@ class StockMove(models.Model):
         help="Formatted list of expiry dates for assigned lot(s) in this stock move."
     )
 
-    @api.depends('move_line_ids.expiration_date', 'move_line_ids.lot_id', 'move_line_ids.lot_id.expiration_date')
+    @api.depends(
+        'move_line_ids.expiration_date',
+        'move_line_ids.lot_id',
+        'move_line_ids.lot_id.expiration_date',
+        'purchase_type'
+    )
     def _compute_lot_expiry_display(self):
         for move in self:
+            if move.purchase_type == 'internal_po':
+                move.lot_expiry_display = False
+                continue
             expiries = []
             lots = move.lot_ids | move.move_line_ids.lot_id
             for lot in lots:

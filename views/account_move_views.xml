@@ -9,16 +9,21 @@
             <!-- Header Hidden Fields for PO Logistics -->
             <xpath expr="//header" position="inside">
                 <field name="purchase_order_id" invisible="1"/>
+                <field name="purchase_type" invisible="1"/>
+            </xpath>
+
+            <xpath expr="//field[@name='invoice_date']" position="after">
+                <field name="purchase_journal" invisible="move_type not in ('in_invoice', 'in_refund')"/>
             </xpath>
 
             <!-- Secondary Logistics Statusbar in Header -->
             <xpath expr="//field[@name='state'][@widget='statusbar']" position="before">
-                <field name="logistics_stage" widget="statusbar" statusbar_visible="shipment_booking,transport_port,on_the_way,clearance,received" invisible="move_type != 'in_invoice' or not purchase_order_id" readonly="1"/>
+                <field name="logistics_stage" widget="statusbar" statusbar_visible="shipment_booking,transport_port,on_the_way,clearance,received" invisible="move_type != 'in_invoice' or not purchase_order_id or purchase_type == 'internal_po'" readonly="1"/>
             </xpath>
 
             <!-- Logistics and Warehouse Info Banner above Notebook -->
             <xpath expr="//notebook" position="before">
-                <div class="alert alert-info d-flex align-items-center mb-3 shadow-sm" role="status" invisible="move_type != 'in_invoice' or not purchase_order_id">
+                <div class="alert alert-info d-flex align-items-center mb-3 shadow-sm" role="status" invisible="move_type != 'in_invoice' or not purchase_order_id or purchase_type == 'internal_po'">
                     <i class="fa fa-truck fa-2x me-3 text-info" title="بيانات الشحن" aria-label="بيانات الشحن"/>
                     <div class="w-100 d-flex justify-content-between align-items-center">
                         <div>
@@ -31,7 +36,7 @@
 
             <!-- Clearance Checklist Tab in Notebook -->
             <xpath expr="//notebook" position="inside">
-                <page string="قائمة الموافقات والتخليص (Clearance Checklist)" name="clearance_checklist" invisible="move_type != 'in_invoice' or not purchase_order_id">
+                <page string="قائمة الموافقات والتخليص (Clearance Checklist)" name="clearance_checklist" invisible="move_type != 'in_invoice' or not purchase_order_id or purchase_type == 'internal_po'">
                     <div class="row g-3 p-2">
                         <!-- 1. MOH Approval -->
                         <div class="col-md-6 col-12">
@@ -107,8 +112,8 @@
             <!-- Line lot and expiry attributes -->
             <xpath expr="//field[@name='invoice_line_ids']/list//field[@name='quantity']" position="after">
                 <field name="product_tracking" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
             </xpath>
         </field>
     </record>
@@ -120,8 +125,10 @@
         <field name="inherit_id" ref="account.view_in_invoice_bill_tree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='status_in_payment']" position="before">
-                <field name="purchase_order_id" optional="show"/>
-                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('shipment_booking', 'transport_port')" decoration-warning="logistics_stage == 'on_the_way'" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show"/>
+                <field name="purchase_type" column_invisible="True"/>
+                <field name="purchase_order_id" optional="show" invisible="purchase_type == 'internal_po'"/>
+                <field name="purchase_journal" optional="show"/>
+                <field name="logistics_stage" widget="badge" decoration-info="logistics_stage in ('shipment_booking', 'transport_port')" decoration-warning="logistics_stage == 'on_the_way'" decoration-primary="logistics_stage == 'clearance'" decoration-success="logistics_stage == 'received'" optional="show" invisible="purchase_type == 'internal_po'"/>
             </xpath>
         </field>
     </record>
@@ -134,15 +141,15 @@
         <field name="arch" type="xml">
             <xpath expr="//search" position="inside">
                 <separator/>
-                <filter string="حجز الشحنة (Shipment Booking)" name="stage_shipment_booking" domain="[('logistics_stage', '=', 'shipment_booking')]"/>
-                <filter string="نقل للميناء / المطار (Transport)" name="stage_transport_port" domain="[('logistics_stage', '=', 'transport_port')]"/>
-                <filter string="الشحنة في الطريق (On the way)" name="stage_on_the_way" domain="[('logistics_stage', '=', 'on_the_way')]"/>
-                <filter string="بدء التخليص (Clearance)" name="stage_clearance" domain="[('logistics_stage', '=', 'clearance')]"/>
-                <filter string="الاستلام المخزني (Received)" name="stage_received" domain="[('logistics_stage', '=', 'received')]"/>
+                <filter string="حجز الشحنة (Shipment Booking)" name="stage_shipment_booking" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'shipment_booking')]"/>
+                <filter string="نقل للميناء / المطار (Transport)" name="stage_transport_port" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'transport_port')]"/>
+                <filter string="الشحنة في الطريق (On the way)" name="stage_on_the_way" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'on_the_way')]"/>
+                <filter string="بدء التخليص (Clearance)" name="stage_clearance" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'clearance')]"/>
+                <filter string="الاستلام المخزني (Received)" name="stage_received" domain="[('purchase_type', '=', 'external_po'), ('logistics_stage', '=', 'received')]"/>
                 <separator/>
             </xpath>
             <xpath expr="//group" position="inside">
-                <filter string="مرحلة الشحنة (Logistics Stage)" name="group_by_logistics_stage" context="{'group_by': 'logistics_stage'}"/>
+                <filter string="مرحلة الشحنة (Logistics Stage)" name="group_by_logistics_stage" domain="[('purchase_type', '=', 'external_po')]" context="{'group_by': 'logistics_stage'}"/>
             </xpath>
         </field>
     </record>

@@ -48,6 +48,7 @@ class PurchaseLotQrWizard(models.TransientModel):
             )
 
     def action_select_all(self):
+        self._ensure_external_source()
         self.line_ids.write({'is_selected': True})
         return {
             'type': 'ir.actions.act_window',
@@ -58,6 +59,7 @@ class PurchaseLotQrWizard(models.TransientModel):
         }
 
     def action_unselect_all(self):
+        self._ensure_external_source()
         self.line_ids.write({'is_selected': False})
         return {
             'type': 'ir.actions.act_window',
@@ -69,6 +71,7 @@ class PurchaseLotQrWizard(models.TransientModel):
 
     def action_print(self):
         self.ensure_one()
+        self._ensure_external_source()
         selected_lines = self.line_ids.filtered(lambda l: l.is_selected and l.copies > 0)
         if not selected_lines:
             raise UserError(_("Please select at least one lot line with copies > 0 to print labels."))
@@ -93,6 +96,12 @@ class PurchaseLotQrWizard(models.TransientModel):
             return val
 
         return _clean_none(res)
+
+    def _ensure_external_source(self):
+        for wizard in self:
+            purchase_order = wizard.purchase_id or wizard.picking_id.purchase_id
+            if purchase_order and purchase_order.purchase_type == 'internal_po':
+                raise UserError(_("Custom QR labels are not available for internal purchase orders."))
 
 
 class PurchaseLotQrWizardLine(models.TransientModel):

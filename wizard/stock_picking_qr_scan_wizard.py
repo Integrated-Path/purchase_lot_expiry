@@ -80,6 +80,7 @@ class StockPickingQrScanWizard(models.TransientModel):
     def _populate_lines(self):
         """ Populate or refresh line_ids from picking active moves """
         self.ensure_one()
+        self._ensure_external_purchase()
         self.line_ids.unlink()
         lines_vals = []
         for move in self.picking_id.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
@@ -97,6 +98,7 @@ class StockPickingQrScanWizard(models.TransientModel):
     def action_process_scan(self):
         """ Process barcode/QR scan, refresh progress and keep modal open """
         self.ensure_one()
+        self._ensure_external_purchase()
         if not self.scan_input:
             return self._reopen_wizard()
 
@@ -130,10 +132,18 @@ class StockPickingQrScanWizard(models.TransientModel):
     def action_validate_picking(self):
         """ Validate the picking upon completion """
         self.ensure_one()
+        self._ensure_external_purchase()
         if not self.is_all_fulfilled:
             raise UserError(_("Receipt is not yet fully fulfilled. Please finish scanning all items before validating."))
         res = self.picking_id.button_validate()
         return res
+
+    def _ensure_external_purchase(self):
+        if (
+            self.picking_id.purchase_id
+            and self.picking_id.purchase_id.purchase_type == 'internal_po'
+        ):
+            raise UserError(_("Custom QR receiving is not available for internal purchase orders."))
 
     def _reopen_wizard(self):
         return {

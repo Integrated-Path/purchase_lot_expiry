@@ -12,6 +12,12 @@ class StockLot(models.Model):
         index=True,
         help='Structured QR code payload used for scanning and label printing.'
     )
+    product_part_number = fields.Char(
+            related='product_id.part_number',
+            string='Part Number',
+            store=True,
+            readonly=True
+    )
 
     @api.depends('name', 'product_id', 'product_id.barcode', 'product_id.default_code', 'expiration_date')
     def _compute_qr_code_value(self):

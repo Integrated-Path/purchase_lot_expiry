@@ -55,6 +55,7 @@ class PurchaseLotRedistributeWizard(models.TransientModel):
 
     def action_distribute_evenly(self):
         self.ensure_one()
+        self._ensure_external_purchase()
         nb_lines = len(self.line_ids)
         if nb_lines > 0:
             even_qty = self.product_qty / nb_lines
@@ -70,6 +71,7 @@ class PurchaseLotRedistributeWizard(models.TransientModel):
 
     def action_confirm(self):
         self.ensure_one()
+        self._ensure_external_purchase()
         line = self.purchase_line_id
 
         # Safety Guard: Check if linked picking is done or bill is posted
@@ -111,6 +113,11 @@ class PurchaseLotRedistributeWizard(models.TransientModel):
         line._update_stock_move_lots()
         line._update_draft_vendor_bills()
         return {'type': 'ir.actions.act_window_close'}
+
+    def _ensure_external_purchase(self):
+        for wizard in self:
+            if wizard.purchase_line_id.purchase_type == 'internal_po':
+                raise UserError(_("Lot redistribution is not available for internal purchase orders."))
 
 
 class PurchaseLotRedistributeWizardLine(models.TransientModel):

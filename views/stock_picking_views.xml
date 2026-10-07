@@ -10,19 +10,20 @@
             <xpath expr="//header" position="inside">
                 <field name="picking_type_code" invisible="1"/>
                 <field name="purchase_id" invisible="1"/>
+                <field name="purchase_type" invisible="1"/>
                 <field name="purchase_logistics_stage" invisible="1"/>
                 <field name="bill_logistics_stage" invisible="1"/>
                 <field name="is_receipt_locked_for_clearance" invisible="1"/>
                 <!-- Scanning and QR Labels Buttons -->
-                <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan Receipt QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance"/>
-                <button name="action_open_receipt_mobile_qr_scan_wizard" type="object" string="Scan via Mobile" class="btn btn-outline-primary" icon="fa-camera" groups="purchase_lot_expiry.group_mobile_qr_scan" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance"/>
-                <button name="action_open_purchase_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="picking_type_code != 'incoming'"/>
+                <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan Receipt QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance or purchase_type == 'internal_po'"/>
+                <button name="action_open_receipt_mobile_qr_scan_wizard" type="object" string="Scan via Mobile" class="btn btn-outline-primary" icon="fa-camera" groups="purchase_lot_expiry.group_mobile_qr_scan" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance or purchase_type == 'internal_po'"/>
+                <button name="action_open_purchase_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="picking_type_code != 'incoming' or purchase_type == 'internal_po'"/>
             </xpath>
 
             <!-- Informative Status Banners and Inline Fast Scanner Bar above notebook -->
             <xpath expr="//notebook" position="before">
                 <!-- Warning Banner: View-Only until Clearance -->
-                <div class="alert alert-warning d-flex align-items-center mb-3 shadow-sm" role="status" invisible="not is_receipt_locked_for_clearance">
+                <div class="alert alert-warning d-flex align-items-center mb-3 shadow-sm" role="status" invisible="not is_receipt_locked_for_clearance or purchase_type == 'internal_po'">
                     <i class="fa fa-lock fa-2x me-3 text-warning" title="الشحنة للعرض فقط" aria-label="الشحنة للعرض فقط"/>
                     <div>
                         <h5 class="mb-1 fw-bold">الشحنة للعرض فقط في المخازن (عرض فقط)</h5>
@@ -32,7 +33,7 @@
                 </div>
 
                 <!-- Success Banner: Clearance Stage Unlocked for Receiving -->
-                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="status" invisible="state in ('done', 'cancel') or not purchase_id or is_receipt_locked_for_clearance">
+                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="status" invisible="state in ('done', 'cancel') or not purchase_id or is_receipt_locked_for_clearance or purchase_type == 'internal_po'">
                     <i class="fa fa-unlock-alt fa-2x me-3 text-success" title="متاح للاستلام المخزني" aria-label="متاح للاستلام المخزني"/>
                     <div>
                         <h5 class="mb-1 fw-bold">متاح للاستلام المخزني</h5>
@@ -41,14 +42,14 @@
                 </div>
 
                 <!-- Inline Fast Scanner Bar -->
-                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance">
+                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="state in ('done', 'cancel') or picking_type_code != 'incoming' or is_receipt_locked_for_clearance or purchase_type == 'internal_po'">
                     <div class="row g-2 align-items-center">
                         <div class="col-auto">
                             <span class="badge bg-primary fs-6"><i class="fa fa-qrcode me-1"/> Fast QR Scan</span>
                         </div>
                         <div class="col-md-6 col-12 d-flex">
                             <field name="qr_scan_input" placeholder="Scan Lot / Product QR Code here..." class="form-control form-control-sm me-2"/>
-                            <button name="action_process_qr_scan" type="object" string="Scan" class="btn btn-sm btn-primary" icon="fa-barcode"/>
+                            <button name="action_process_qr_scan" type="object" string="Scan" class="btn btn-sm btn-primary" icon="fa-barcode" />
                         </div>
                         <div class="col-md-4 col-12">
                             <field name="qr_scan_status" widget="char" readonly="1" class="text-success fw-bold small" invisible="not qr_scan_status"/>
@@ -59,9 +60,10 @@
 
             <!-- Operations lines lot attributes -->
             <xpath expr="//field[@name='move_ids']/list/field[@name='product_id']" position="after">
+                <field name="purchase_type" column_invisible="True"/>
                 <field name="product_tracking" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" column_invisible="parent.purchase_type == 'internal_po'" invisible="not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" column_invisible="parent.purchase_type == 'internal_po'" invisible="not product_tracking or product_tracking == 'none'"/>
             </xpath>
         </field>
     </record>
@@ -73,7 +75,8 @@
         <field name="inherit_id" ref="stock.vpicktree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='state']" position="before">
-                <field name="purchase_logistics_stage" string="مرحلة الشحنة" widget="badge" decoration-warning="purchase_logistics_stage in ('shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="purchase_logistics_stage == 'clearance'" decoration-success="purchase_logistics_stage == 'received'" optional="show"/>
+                <field name="purchase_type" column_invisible="True"/>
+                <field name="purchase_logistics_stage" string="مرحلة الشحنة" widget="badge" decoration-warning="purchase_logistics_stage in ('shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="purchase_logistics_stage == 'clearance'" decoration-success="purchase_logistics_stage == 'received'" optional="show" invisible="purchase_type == 'internal_po'"/>
             </xpath>
         </field>
     </record>
@@ -85,9 +88,10 @@
         <field name="inherit_id" ref="stock.view_move_tree"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='product_id']" position="after">
+                <field name="purchase_type" column_invisible="True"/>
                 <field name="product_tracking" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
             </xpath>
         </field>
     </record>
@@ -99,9 +103,10 @@
         <field name="inherit_id" ref="stock.view_move_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='product_id']" position="after">
+                <field name="purchase_type" invisible="1"/>
                 <field name="product_tracking" invisible="1"/>
-                <field name="lot_ids" widget="many2many_tags" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" invisible="not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
             </xpath>
         </field>
     </record>

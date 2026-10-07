@@ -27,6 +27,11 @@ class StockPicking(models.Model):
         store=True,
         readonly=True
     )
+    purchase_type = fields.Selection(
+        related='purchase_id.purchase_type',
+        string='Purchase Type',
+        readonly=True
+    )
     bill_logistics_stage = fields.Selection(
         LOGISTICS_STAGES,
         string='مرحلة الشحنة (الفاتورة) / Bill Logistics Stage',
@@ -41,12 +46,16 @@ class StockPicking(models.Model):
         help='Locks receiving and validation until vendor bill reaches clearance stage.'
     )
 
-    @api.depends('purchase_id.invoice_ids.logistics_stage', 'purchase_id.invoice_ids.state')
+    @api.depends(
+        'purchase_id.purchase_type',
+        'purchase_id.invoice_ids.logistics_stage',
+        'purchase_id.invoice_ids.state'
+    )
     def _compute_bill_logistics_stage(self):
         valid_keys = set(dict(LOGISTICS_STAGES).keys())
         for picking in self:
             stage = False
-            if picking.purchase_id:
+            if picking.purchase_id and picking.purchase_id.purchase_type != 'internal_po':
                 active_bills = picking.purchase_id.invoice_ids.filtered(
                     lambda m: m.move_type == 'in_invoice' and m.state != 'cancel' and m.logistics_stage
                 )
@@ -54,10 +63,19 @@ class StockPicking(models.Model):
                     stage = active_bills[0].logistics_stage
             picking.bill_logistics_stage = stage
 
-    @api.depends('bill_logistics_stage', 'purchase_id.logistics_stage', 'picking_type_code')
+    @api.depends(
+        'bill_logistics_stage',
+        'purchase_id.logistics_stage',
+        'purchase_id.purchase_type',
+        'picking_type_code'
+    )
     def _compute_receipt_locked_for_clearance(self):
         for picking in self:
-            if picking.picking_type_code == 'incoming' and picking.purchase_id:
+            if (
+                picking.picking_type_code == 'incoming'
+                and picking.purchase_id
+                and picking.purchase_id.purchase_type != 'internal_po'
+            ):
                 is_unlocked = (
                     picking.bill_logistics_stage in ('clearance', 'received') or
                     picking.purchase_id.logistics_stage in ('clearance', 'received')
@@ -76,7 +94,12 @@ class StockPicking(models.Model):
 
     def button_validate(self):
         for picking in self:
-            if picking.picking_type_code == 'incoming' and picking.purchase_id and picking.is_receipt_locked_for_clearance:
+            if (
+                picking.picking_type_code == 'incoming'
+                and picking.purchase_id
+                and picking.purchase_id.purchase_type != 'internal_po'
+                and picking.is_receipt_locked_for_clearance
+            ):
                 stage_label = picking._get_clearance_stage_label()
                 raise UserError(_(
                     "⚠️ لا يمكن استلام هذه الشحنة حالياً في المخازن.\n\n"
@@ -87,7 +110,12 @@ class StockPicking(models.Model):
         res = super(StockPicking, self).button_validate()
 
         for picking in self:
-            if picking.state == 'done' and picking.picking_type_code == 'incoming' and picking.purchase_id:
+            if (
+                picking.state == 'done'
+                and picking.picking_type_code == 'incoming'
+                and picking.purchase_id
+                and picking.purchase_id.purchase_type != 'internal_po'
+            ):
                 po = picking.purchase_id
                 incoming_picks = po.picking_ids.filtered(lambda x: x.picking_type_code == 'incoming')
                 if all(p.state in ('done', 'cancel') for p in incoming_picks):
@@ -95,11 +123,24 @@ class StockPicking(models.Model):
                     po.message_post(body=_(
                         "تم استلام الشحنة في المخازن بنجاح بواسطة الإذن: <b>%s</b>، واكتملت مرحلة <b>الاستلام المخزني (Received)</b> تلقائياً."
                     ) % picking.name)
+            elif picking.purchase_id.purchase_type == 'internal_po':
+                if picking.purchase_id and picking.location_dest_id.usage == 'supplier':
+                    purchase = picking.purchase_id
+                    
+                    invoices_to_cancel = purchase.invoice_ids.filtered(lambda inv: inv.state != 'cancel')
+                    if invoices_to_cancel:
+                        invoices_to_cancel.button_cancel()
+
+                    if purchase.state in ('purchase', 'done'):
+                        purchase.button_unlock()
+                    purchase.write({'state': 'draft'})
         return res
 
     def action_open_purchase_lot_qr_wizard(self):
         """ Open QR Label generation wizard pre-filled with lots from this purchase receipt """
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            raise UserError(_("QR label generation is not available for internal purchase receipts."))
         wizard_lines = []
         # First gather from stock.move.lines
         for ml in self.move_line_ids.filtered(lambda l: l.lot_id or l.lot_name):
@@ -147,6 +188,11 @@ class StockPicking(models.Model):
 
     def action_open_lot_qr_wizard(self):
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            parent_action = getattr(super(), 'action_open_lot_qr_wizard', None)
+            if parent_action:
+                return parent_action()
+            raise UserError(_("QR label generation is not available for internal purchase receipts."))
         if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_lot_qr_wizard'):
             return self.action_open_purchase_lot_qr_wizard()
         return super().action_open_lot_qr_wizard()
@@ -154,7 +200,12 @@ class StockPicking(models.Model):
     def _ensure_receipt_quantities_zero_for_scan(self):
         """ Ensure incoming receipt has Done quantities at 0 so scanning fills the order. """
         for picking in self:
-            if picking.picking_type_code == 'incoming' and picking.state not in ('done', 'cancel') and picking.purchase_id:
+            if (
+                picking.picking_type_code == 'incoming'
+                and picking.state not in ('done', 'cancel')
+                and picking.purchase_id
+                and picking.purchase_id.purchase_type != 'internal_po'
+            ):
                 has_partial_scans = any(0 < ml.quantity < ml.move_id.product_uom_qty for ml in picking.move_line_ids)
                 if not has_partial_scans and all(ml.quantity == ml.move_id.product_uom_qty for ml in picking.move_line_ids if ml.move_id.product_uom_qty > 0):
                     picking.purchase_id._init_incoming_receipt_quantities()
@@ -162,6 +213,8 @@ class StockPicking(models.Model):
     def action_open_receipt_qr_scan_wizard(self):
         """ Open dedicated warehouse receipt kiosk scanner wizard """
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.state in ('done', 'cancel'):
             raise UserError(_("This transfer is already in state '%s' and cannot be processed.") % self.state)
         if self.is_receipt_locked_for_clearance:
@@ -184,6 +237,11 @@ class StockPicking(models.Model):
 
     def action_open_qr_scan_wizard(self):
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            parent_action = getattr(super(), 'action_open_qr_scan_wizard', None)
+            if parent_action:
+                return parent_action()
+            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_qr_scan_wizard'):
             return self.action_open_receipt_qr_scan_wizard()
         return super().action_open_qr_scan_wizard()
@@ -191,6 +249,8 @@ class StockPicking(models.Model):
     def action_process_qr_scan(self):
         """ Process scan from inline picking form view input """
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if not self.qr_scan_input:
             return
 
@@ -297,6 +357,8 @@ class StockPicking(models.Model):
     def _process_receipt_qr_payload(self, raw_string):
         """ Resolves parsed QR payload and updates picking move lines """
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.state in ('done', 'cancel'):
             raise UserError(_("Receipt '%s' is in state '%s' and cannot be modified.") % (self.name, self.state))
         if self.is_receipt_locked_for_clearance:
@@ -471,6 +533,11 @@ class StockPicking(models.Model):
 
     def _process_qr_payload(self, raw_string):
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            parent_processor = getattr(super(), '_process_qr_payload', None)
+            if parent_processor:
+                return parent_processor(raw_string)
+            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.picking_type_code == 'incoming' or not hasattr(super(), '_process_qr_payload'):
             return self._process_receipt_qr_payload(raw_string)
         return super()._process_qr_payload(raw_string)
@@ -478,6 +545,8 @@ class StockPicking(models.Model):
     def action_open_receipt_mobile_qr_scan_wizard(self):
         """ Open dedicated mobile camera QR scanner for warehouse receipts """
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.state in ('done', 'cancel'):
             raise UserError(_("Transfer '%s' is in state '%s' and cannot be processed.") % (self.name, self.state))
         if self.is_receipt_locked_for_clearance:
@@ -498,6 +567,11 @@ class StockPicking(models.Model):
 
     def action_open_mobile_qr_scan_wizard(self):
         self.ensure_one()
+        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+            parent_action = getattr(super(), 'action_open_mobile_qr_scan_wizard', None)
+            if parent_action:
+                return parent_action()
+            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_mobile_qr_scan_wizard'):
             return self.action_open_receipt_mobile_qr_scan_wizard()
         return super().action_open_mobile_qr_scan_wizard()

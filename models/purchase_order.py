@@ -116,34 +116,57 @@ class PurchaseOrder(models.Model):
     customs_ref = fields.Char(string='رقم البيان الجمركي', copy=False)
     customs_date = fields.Date(string='تاريخ الإخراج الجمركي', copy=False)
 
-    @api.depends('picking_type_id')
+    purchase_type = fields.Selection([
+        ('internal_po', 'Internal Purchase'),
+        ('external_po', 'External Purchase'),
+    ], string='نوع الشراء', required=True, default='internal_po', tracking=True)
+
+    purchase_journal = fields.Many2one(
+        'account.journal',
+        string = "Purchase Journal",
+        readonly=True
+    )
+
+    @api.depends('picking_type_id', 'purchase_type')
     def _compute_destination_warehouse_id(self):
         for order in self:
-            order.destination_warehouse_id = order.picking_type_id.warehouse_id
+            order.destination_warehouse_id = (
+                order.picking_type_id.warehouse_id
+                if order.purchase_type != 'internal_po'
+                else False
+            )
 
     def _inverse_destination_warehouse_id(self):
         for order in self:
-            if order.destination_warehouse_id and order.destination_warehouse_id.in_type_id:
+            if (
+                order.purchase_type != 'internal_po'
+                and order.destination_warehouse_id
+                and order.destination_warehouse_id.in_type_id
+            ):
                 order.picking_type_id = order.destination_warehouse_id.in_type_id
 
     # Pipeline Stage Transition Methods
     def button_confirm(self):
         res = super(PurchaseOrder, self).button_confirm()
-        for order in self:
+        if self.purchase_type == "external_po":
+            self.purchase_journal = self.env['account.journal'].search([('name', '=', 'External Purchases')], limit=1)
+        else:
+            self.purchase_journal = self.env['account.journal'].search([('name', '=', 'Internal Purchases')], limit=1)            
+        for order in self.filtered(lambda po: po.purchase_type == 'external_po'):
             if order.logistics_stage == 'rfq':
                 order.logistics_stage = 'po'
         return res
 
     def button_approve(self, force=False):
         res = super(PurchaseOrder, self).button_approve(force=force)
-        for order in self:
+        for order in self.filtered(lambda po: po.purchase_type == 'external_po'):
             if order.logistics_stage == 'rfq':
                 order.logistics_stage = 'po'
         return res
 
     def button_draft(self):
         res = super(PurchaseOrder, self).button_draft()
-        for order in self:
+        for order in self.filtered(lambda po: po.purchase_type == 'external_po'):
             order.logistics_stage = 'rfq'
         return res
 
@@ -161,20 +184,27 @@ class PurchaseOrder(models.Model):
         return bills
 
     def write(self, vals):
-        if vals.get('logistics_stage') in ('pi', 'shipment_booking', 'transport_port', 'on_the_way', 'clearance', 'received'):
-            self._check_tracked_products_have_lots()
+        external_orders = self.filtered(
+            lambda order: vals.get('purchase_type', order.purchase_type) == 'external_po'
+        )
+        if (
+            vals.get('logistics_stage') in (
+                'pi', 'shipment_booking', 'transport_port', 'on_the_way', 'clearance', 'received'
+            )
+            and external_orders
+        ):
+            external_orders._check_tracked_products_have_lots()
+
         res = super(PurchaseOrder, self).write(vals)
 
-        # Synchronize stage to linked vendor bills
         if 'logistics_stage' in vals:
-            for order in self:
+            for order in external_orders:
                 bills = order._get_linked_vendor_bills()
                 if bills:
-                    bills.filtered(lambda b: b.logistics_stage != order.logistics_stage).write({
+                    bills.filtered(lambda bill: bill.logistics_stage != order.logistics_stage).write({
                         'logistics_stage': order.logistics_stage
                     })
 
-        # Synchronize checklist fields to linked vendor bills
         if not self.env.context.get('skip_checklist_sync'):
             checklist_fields = {
                 'moh_approval', 'moh_ref', 'moh_date', 'moh_attachment_ids',
@@ -184,7 +214,7 @@ class PurchaseOrder(models.Model):
             }
             updated = checklist_fields & set(vals.keys())
             if updated:
-                for order in self:
+                for order in external_orders:
                     bills = order._get_linked_vendor_bills()
                     if bills:
                         bill_vals = {}
@@ -202,6 +232,8 @@ class PurchaseOrder(models.Model):
         in purchase order lines has its lot established before moving to PI stage.
         """
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             missing_lot_products = []
             missing_expiry_products = []
             for line in order.order_line.filtered(lambda l: not l.display_type and l.product_id):
@@ -229,16 +261,22 @@ class PurchaseOrder(models.Model):
 
     def action_stage_manufacturing(self):
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             order.logistics_stage = 'manufacturing'
             order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>قيد التصنيع (Manufacturing)</b>')))
 
     def action_stage_expiry_check(self):
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             order.logistics_stage = 'expiry_check'
             order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>تدقيق تواريخ التلف (Expiry Check)</b>')))
 
     def action_stage_pi(self):
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             order._check_tracked_products_have_lots()
             order.logistics_stage = 'pi'
             order.message_post(body=Markup(_(
@@ -251,22 +289,30 @@ class PurchaseOrder(models.Model):
 
     def action_stage_shipment_booking(self):
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             order.logistics_stage = 'shipment_booking'
             order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>حجز الشحنة (Shipment Booking)</b>')))
 
     def action_stage_transport_port(self):
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             order.logistics_stage = 'transport_port'
             target_desc = _('الميناء البحري') if order.freight_type == 'sea' else _('المطار الجوي')
             order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>نقل البضاعة إلى %s</b>')) % target_desc)
 
     def action_stage_on_the_way(self):
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             order.logistics_stage = 'on_the_way'
             order.message_post(body=Markup(_('تم تحديث مرحلة الشحنة إلى: <b>الشحنة في الطريق (Shipment on the way)</b>')))
 
     def action_stage_clearance(self):
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             order.logistics_stage = 'clearance'
             order.message_post(body=Markup(_(
                 'تم تحديث مرحلة الشحنة إلى: <b>التخليص (Clearance)</b>.<br/>'
@@ -283,6 +329,8 @@ class PurchaseOrder(models.Model):
 
     def action_stage_received(self):
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             incoming = order.picking_ids.filtered(lambda p: p.picking_type_code == 'incoming' and p.state not in ('done', 'cancel'))
             if incoming:
                 return order.action_view_picking()
@@ -296,6 +344,8 @@ class PurchaseOrder(models.Model):
             'clearance', 'received'
         ]
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             if order.logistics_stage in stage_sequence:
                 idx = stage_sequence.index(order.logistics_stage)
                 if idx > 1:
@@ -311,6 +361,8 @@ class PurchaseOrder(models.Model):
 
     def _prepare_invoice(self):
         invoice_vals = super(PurchaseOrder, self)._prepare_invoice()
+        if self.purchase_type == 'internal_po':
+            return invoice_vals
         invoice_vals['purchase_order_id'] = self.id
         invoice_vals.update({
             'moh_approval': self.moh_approval,
@@ -337,19 +389,26 @@ class PurchaseOrder(models.Model):
         return invoice_vals
 
     def _create_picking(self):
-        orders_to_create = self.filtered(lambda po: po.logistics_stage in (
+        internal_orders = self.filtered(lambda po: po.purchase_type == 'internal_po')
+        external_orders = self.filtered(
+            lambda po: po.purchase_type != 'internal_po' and po.logistics_stage in (
             'pi', 'shipment_booking', 'transport_port', 'on_the_way', 'clearance', 'received'
-        ))
-        if orders_to_create:
-            res = super(PurchaseOrder, orders_to_create)._create_picking()
-            for order in orders_to_create:
+            )
+        )
+        res = True
+        if internal_orders:
+            res = super(PurchaseOrder, internal_orders)._create_picking()
+        if external_orders:
+            res = super(PurchaseOrder, external_orders)._create_picking()
+            for order in external_orders:
                 order._init_incoming_receipt_quantities()
-            return res
-        return True
+        return res
 
     def _init_incoming_receipt_quantities(self):
         """ Ensure incoming receipts start with 0 Done quantity and await QR scanning. """
         for order in self:
+            if order.purchase_type == 'internal_po':
+                continue
             for picking in order.picking_ids.filtered(lambda p: p.picking_type_code == 'incoming' and p.state not in ('done', 'cancel')):
                 for move in picking.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
                     move.picked = False
@@ -360,8 +419,31 @@ class PurchaseOrder(models.Model):
                         move.move_line_ids.unlink()
                         move.invalidate_recordset(['quantity'])
 
+    
+    #Auto creation & confirmation of BILL & Receipt.
+    def action_confirm_pick(self):
+        res = super().button_confirm()
+        for purchase in self:
+            for picking in purchase.picking_ids.filtered(lambda p: p.state != 'done'):
+                for move in picking.move_ids:
+                    #Set Demand to Quantity in Delivery
+                    move.quantity = move.product_uom_qty
+                picking.action_assign()
+                picking.with_context(skip_backorder=True).button_validate()
+
+            #Create and post the invoice
+            purchase.action_create_invoice()
+            for invoice in purchase.invoice_ids.filtered(lambda i:i.state=='draft'):
+                if not invoice.invoice_date:
+                    invoice.invoice_date = fields.Date.today()
+                invoice.action_post()
+
+        return res
+
     def action_open_lot_qr_wizard(self):
         self.ensure_one()
+        if self.purchase_type == 'internal_po':
+            raise UserError(_('QR label generation is not available for internal purchase orders.'))
         wizard_lines = []
         for line in self.order_line.filtered(lambda l: l.lot_ids):
             if line.pol_lot_ids:

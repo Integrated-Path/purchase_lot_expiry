@@ -64,6 +64,12 @@ class StockPickingMobileQrWizard(models.TransientModel):
     @api.depends('picking_id.move_ids.quantity', 'picking_id.move_ids.product_uom_qty', 'picking_id.move_line_ids.quantity', 'picking_id.move_line_ids.lot_id')
     def _compute_lines(self):
         for wizard in self:
+            if (
+                wizard.picking_id.purchase_id
+                and wizard.picking_id.purchase_id.purchase_type == 'internal_po'
+            ):
+                wizard.line_ids = False
+                continue
             lines = []
             for move in wizard.picking_id.move_ids.filtered(lambda m: m.state not in ('done', 'cancel')):
                 lots_str = ", ".join(filter(None, move.move_line_ids.mapped('lot_id.name')))
@@ -86,6 +92,7 @@ class StockPickingMobileQrWizard(models.TransientModel):
         4. Plain lot / barcode or GS1-128
         """
         self.ensure_one()
+        self._ensure_external_purchase()
         if not raw_payload:
             return {'success': False, 'message': _("Empty QR scan received.")}
 
@@ -129,7 +136,15 @@ class StockPickingMobileQrWizard(models.TransientModel):
     def action_validate_transfer(self):
         """ Directly validate picking from mobile wizard """
         self.ensure_one()
+        self._ensure_external_purchase()
         return self.picking_id.button_validate()
+
+    def _ensure_external_purchase(self):
+        if (
+            self.picking_id.purchase_id
+            and self.picking_id.purchase_id.purchase_type == 'internal_po'
+        ):
+            raise UserError(_("Custom QR receiving is not available for internal purchase orders."))
 
 
 class StockPickingMobileQrWizardLine(models.TransientModel):
