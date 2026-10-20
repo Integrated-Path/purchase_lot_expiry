@@ -448,26 +448,28 @@ class PurchaseOrder(models.Model):
         for line in self.order_line.filtered(lambda l: l.lot_ids):
             if line.pol_lot_ids:
                 for pol_lot in line.pol_lot_ids:
+                    copies = int(pol_lot.quantity) if pol_lot.quantity >= 1.0 else 1
                     wizard_lines.append((0, 0, {
                         'product_id': line.product_id.id,
                         'lot_id': pol_lot.lot_id.id,
                         'lot_name': pol_lot.lot_id.name,
                         'expiration_date': pol_lot.lot_id.expiration_date or pol_lot.expiration_date,
-                        'quantity': pol_lot.quantity,
-                        'copies': 1,
+                        'quantity': 1.0,
+                        'copies': copies,
                         'is_selected': True,
                     }))
             else:
                 nb = len(line.lot_ids)
                 qty = line.product_qty / nb if nb > 0 else 1.0
+                copies = int(qty) if qty >= 1.0 else 1
                 for lot in line.lot_ids:
                     wizard_lines.append((0, 0, {
                         'product_id': line.product_id.id,
                         'lot_id': lot.id,
                         'lot_name': lot.name,
                         'expiration_date': lot.expiration_date or line.expiration_date,
-                        'quantity': qty,
-                        'copies': 1,
+                        'quantity': 1.0,
+                        'copies': copies,
                         'is_selected': True,
                     }))
 

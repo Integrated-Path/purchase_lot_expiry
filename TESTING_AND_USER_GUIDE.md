@@ -19,18 +19,19 @@ This guide provides a comprehensive walkthrough of the Lot/Serial synchronizatio
 
 - **Procurement Lot Assignment**: Assign Lot/Serial numbers and expiration dates directly on Purchase Order lines before receiving.
 - **Dynamic Lot Redistribution**: Split and redistribute demand quantities across multiple lots via an interactive wizard.
-- **Instant Cascade Synchronization**: Automatically propagates lot assignments and quantity updates to:
-  - Linked active incoming stock pickings (`stock.move.line`).
-  - Linked draft vendor bills (`account.move.line`).
-- **Native QR Label Printing**: Generates print-ready QR codes dynamically using Odoo's built-in barcode engine.
-- **1-Scan Warehouse Fulfillment**: Warehouse receivers scan a single QR code to identify product, lot, expiry date, and quantity in one pass.
+- **Instant Cascade Synchronization**: Automatically propagates lot assignments to linked active stock pickings and draft vendor bills.
+- **Lot-Centric Pure QR Labels**: Generates product and lot stickers (`PROD:<barcode>|LOT:<lot>|EXP:<date>`) independent of specific operations. Labels stick to products and can be scanned in any inventory operation.
+- **Print Anywhere**: Print labels directly from **Inventory > Lots/Serial Numbers** (single form or batch multi-select), from Purchase Orders, Sales Orders, or any Stock Transfer.
+- **Precision 1-Scan = 1-Unit Fulfillment**: Every scan adds precisely 1.0 unit. Works across all picking types (Receipts, Deliveries, Internal transfers).
+- **Over-Scanning Prevention**: Strictly blocks scanning once the demanded quantity is reached.
+- **Pre-Creation Enforcement**: Scanned lots must already exist in the system; creating unknown lots on the fly during scanning is prevented.
 - **Safety Locking Guards**: Strictly blocks accidental alteration of PO lots once the receipt is processed (`done`) or vendor bill is posted.
 
 ---
 
 ## 2. Label Printing Options Explained
 
-When opening the **Print Lot/Serial QR Labels** wizard (accessible from the **Purchase Order** or **Stock Receipt** header), you will see the following settings:
+When opening the **Print Lot/Serial QR Labels** wizard (accessible from **Inventory > Lots/Serial Numbers**, **Purchase Order**, **Sales Order**, or any **Stock Transfer**), you will see:
 
 ### A. Label Format (Physical Paper & Printer)
 | Option | Dimensions | Ideal Use Case |
@@ -42,15 +43,15 @@ When opening the **Print Lot/Serial QR Labels** wizard (accessible from the **Pu
 ### B. QR Payload Format (Data Encoded Inside the QR Code)
 | Option | Encoded String Example | When to Use |
 |---|---|---|
-| **Structured Delimited** *(Recommended)* | `PROD:887766554433\|LOT:LOT-101\|EXP:2027-09-17\|QTY:10.0` | **Best for standard 2D barcode scanner guns.** Combines SKU, Lot, Expiration Date, and Quantity with no JSON escaping. |
-| **Structured JSON** | `{"b":"887766554433","l":"LOT-101","e":"2027-09-17","q":10.0}` | Best for mobile phone cameras, automated optical sorters, and API integrations. |
+| **Structured Delimited** *(Recommended)* | `PROD:887766554433\|LOT:LOT-101\|EXP:2027-09-17` | **Best for standard 2D barcode scanner guns.** Pure product and lot identity sticker with no operation dependencies. |
+| **Structured JSON** | `{"b":"887766554433","l":"LOT-101","e":"2027-09-17"}` | Best for mobile phone cameras, automated optical sorters, and API integrations. |
 | **Plain Lot Number** | `LOT-101` | Encodes *only* the Lot/Serial text. Best if you want the QR code to behave purely like a traditional 1D barcode. |
 
 ---
 
-## 3. Warehouse Scanning Modes
+## 3. Warehouse Scanning Modes (All Picking Types)
 
-When receiving goods in the warehouse, open the incoming receipt (`WH/IN/...`). You have two scanning workflows:
+When handling inventory transfers (Incoming Receipts, Outgoing Deliveries, or Internal Transfers):
 
 ### Mode 1: Fast QR Scan Bar (Directly on the Form)
 - Located directly above the Operations table on the receipt form:

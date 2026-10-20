@@ -4,10 +4,10 @@
         <field name="name">stock.picking.qr.scan.wizard.form</field>
         <field name="model">stock.picking.qr.scan.wizard</field>
         <field name="arch" type="xml">
-            <form string="Warehouse QR Receipt Scanner">
+            <form string="Warehouse QR Inventory Scanner">
                 <sheet>
                     <div class="alert alert-success" role="alert" invisible="not is_all_fulfilled">
-                        <strong>All items fulfilled!</strong> You can now validate this receipt directly.
+                        <strong>All items fulfilled!</strong> You can now validate this transfer directly.
                     </div>
 
                     <div t-attf-class="alert alert-#{scan_status_type == 'danger' and 'danger' or (scan_status_type == 'success' and 'success' or 'info')}" role="alert">
@@ -34,12 +34,12 @@
                             <button name="action_process_scan" type="object" string="Process Scan" class="btn btn-primary btn-lg" icon="fa-barcode" data-hotkey="s"/>
                         </div>
                         <small class="text-muted mt-1">
-                            Supports JSON QR codes, Pipe-delimited (PROD|LOT|EXP|QTY), GS1-128, or direct Lot/Barcode scans.
+                            Supports JSON, Pipe-delimited (PROD|LOT|EXP), GS1-128, or direct Lot scans. Each scan counts as 1 unit.
                         </small>
                     </div>
 
                     <notebook>
-                        <page string="Receipt Progress">
+                        <page string="Fulfillment Progress">
                             <field name="line_ids">
                                 <list decoration-success="is_fulfilled" decoration-info="not is_fulfilled and done_qty &gt; 0">
                                     <field name="product_id" readonly="1"/>
@@ -58,7 +58,7 @@
                     </notebook>
                 </sheet>
                 <footer>
-                    <button name="action_validate_picking" string="Validate Receipt" type="object" class="btn-success" icon="fa-check" invisible="not is_all_fulfilled" data-hotkey="v"/>
+                    <button name="action_validate_picking" string="Validate Transfer" type="object" class="btn-success" icon="fa-check" invisible="not is_all_fulfilled" data-hotkey="v"/>
                     <button string="Close Scanner" class="btn-secondary" special="cancel" data-hotkey="x"/>
                 </footer>
             </form>

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <record id="stock_lot_part_number_views" model="ir.ui.view">
         <field name="name">stock.lot.part.number.views</field>
@@ -10,6 +10,7 @@
             </xpath>
         </field>
     </record>
+
     <record id="stock_lot_part_number_form_views" model="ir.ui.view">
         <field name="name">stock.lot.part.number.form.views</field>
         <field name="model">stock.lot</field>
@@ -18,6 +19,33 @@
             <xpath expr="//field[@name='product_id']" position="after">
                 <field name="product_part_number" readonly="1"/>
             </xpath>
+        </field>
+    </record>
+
+    <!-- Add Print QR Labels button to Lot/Serial Number form view -->
+    <record id="view_production_lot_form_inherit_qr" model="ir.ui.view">
+        <field name="name">stock.lot.form.inherit.qr</field>
+        <field name="model">stock.lot</field>
+        <field name="inherit_id" ref="stock.view_production_lot_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="action_print_lot_qr_labels" string="Print QR Labels" type="object" class="btn btn-primary" icon="fa-qrcode"/>
+            </xpath>
+            <xpath expr="//field[@name='ref']" position="after">
+                <field name="qr_code_value" readonly="1" groups="base.group_no_one"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Action Server for Multi-selection in Lot/Serial Numbers List View -->
+    <record id="action_server_print_lot_qr_labels" model="ir.actions.server">
+        <field name="name">Print QR Labels</field>
+        <field name="model_id" ref="stock.model_stock_lot"/>
+        <field name="binding_model_id" ref="stock.model_stock_lot"/>
+        <field name="binding_view_types">list,form</field>
+        <field name="state">code</field>
+        <field name="code">
+action = records.action_print_lot_qr_labels()
         </field>
     </record>
 </odoo>

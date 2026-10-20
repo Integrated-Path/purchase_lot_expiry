@@ -102,9 +102,6 @@
                                             <div class="exp-50" t-if="line.expiration_date">
                                                 EXP: <span t-field="line.expiration_date" t-options='{"widget": "date"}'/>
                                             </div>
-                                            <div class="qty-50">
-                                                QTY: <t t-out="'%.1f' % line.quantity"/> <t t-out="line.uom_id.name or ''"/>
-                                            </div>
                                         </td>
                                     </tr>
                                 </table>
@@ -199,9 +196,6 @@
                                             <div class="exp-40" t-if="line.expiration_date">
                                                 E: <span t-field="line.expiration_date" t-options='{"widget": "date"}'/>
                                             </div>
-                                            <div class="qty-40">
-                                                Q: <t t-out="'%.1f' % line.quantity"/>
-                                            </div>
                                         </td>
                                     </tr>
                                 </table>
@@ -263,7 +257,6 @@
                                     <div style="margin-top: 3mm; font-size: 8pt; line-height: 1.3; border-top: 1px solid #eee; padding-top: 2mm;">
                                         <div><strong>Lot/Serial:</strong> <span style="font-size: 9pt; font-weight: bold;"><t t-out="line.lot_name"/></span></div>
                                         <div t-if="line.expiration_date" style="color: #c00;"><strong>Expiry Date:</strong> <span t-field="line.expiration_date" t-options='{"widget": "date"}'/></div>
-                                        <div><strong>Qty:</strong> <t t-out="'%.2f' % line.quantity"/> <t t-out="line.uom_id.name or ''"/></div>
                                     </div>
                                 </div>
                             </t>

@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+from odoo.tools import float_compare
 
 
 from .purchase_order import LOGISTICS_STAGES
@@ -137,20 +138,22 @@ class StockPicking(models.Model):
         return res
 
     def action_open_purchase_lot_qr_wizard(self):
-        """ Open QR Label generation wizard pre-filled with lots from this purchase receipt """
+        """ Open QR Label generation wizard pre-filled with lots from this transfer """
         self.ensure_one()
         if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
             raise UserError(_("QR label generation is not available for internal purchase receipts."))
         wizard_lines = []
         # First gather from stock.move.lines
         for ml in self.move_line_ids.filtered(lambda l: l.lot_id or l.lot_name):
+            target_qty = ml.quantity if ml.quantity > 0 else ml.move_id.product_uom_qty
+            copies = int(target_qty) if target_qty >= 1.0 else 1
             wizard_lines.append((0, 0, {
                 'product_id': ml.product_id.id,
                 'lot_id': ml.lot_id.id if ml.lot_id else False,
                 'lot_name': ml.lot_id.name if ml.lot_id else ml.lot_name,
                 'expiration_date': ml.lot_id.expiration_date if ml.lot_id else False,
-                'quantity': ml.quantity if ml.quantity > 0 else ml.move_id.product_uom_qty,
-                'copies': 1,
+                'quantity': 1.0,
+                'copies': copies,
                 'is_selected': True,
             }))
 
@@ -159,19 +162,20 @@ class StockPicking(models.Model):
             for move in self.move_ids.filtered(lambda m: m.lot_ids):
                 nb = len(move.lot_ids)
                 qty = move.product_uom_qty / nb if nb > 0 else 1.0
+                copies = int(qty) if qty >= 1.0 else 1
                 for lot in move.lot_ids:
                     wizard_lines.append((0, 0, {
                         'product_id': move.product_id.id,
                         'lot_id': lot.id,
                         'lot_name': lot.name,
                         'expiration_date': lot.expiration_date,
-                        'quantity': qty,
-                        'copies': 1,
+                        'quantity': 1.0,
+                        'copies': copies,
                         'is_selected': True,
                     }))
 
         if not wizard_lines:
-            raise UserError(_("No Lot/Serial numbers found on this receipt to generate labels."))
+            raise UserError(_("No Lot/Serial numbers found on this transfer to generate labels."))
 
         wizard = self.env['purchase.lot.qr.wizard'].create({
             'picking_id': self.id,
@@ -193,47 +197,60 @@ class StockPicking(models.Model):
             if parent_action:
                 return parent_action()
             raise UserError(_("QR label generation is not available for internal purchase receipts."))
-        if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_lot_qr_wizard'):
-            return self.action_open_purchase_lot_qr_wizard()
-        return super().action_open_lot_qr_wizard()
+        return self.action_open_purchase_lot_qr_wizard()
+
+    def _ensure_picking_quantities_zero_for_scan(self):
+        """ Ensure picking has Done quantities at 0 so scanning fills the transfer. """
+        for picking in self:
+            if picking.state not in ('done', 'cancel'):
+                if (
+                    picking.picking_type_code == 'incoming'
+                    and picking.purchase_id
+                    and picking.purchase_id.purchase_type != 'internal_po'
+                ):
+                    has_partial_scans = any(0 < ml.quantity < ml.move_id.product_uom_qty for ml in picking.move_line_ids)
+                    if not has_partial_scans and all(ml.quantity == ml.move_id.product_uom_qty for ml in picking.move_line_ids if ml.move_id.product_uom_qty > 0):
+                        picking.purchase_id._init_incoming_receipt_quantities()
+                else:
+                    has_partial_scans = any(0 < ml.quantity < ml.move_id.product_uom_qty for ml in picking.move_line_ids)
+                    if not has_partial_scans and all(ml.quantity == ml.move_id.product_uom_qty for ml in picking.move_line_ids if ml.move_id.product_uom_qty > 0):
+                        for ml in picking.move_line_ids:
+                            ml.quantity = 0.0
+                            ml.picked = False
+                        for move in picking.move_ids:
+                            move.picked = False
+                            move.invalidate_recordset(['quantity'])
 
     def _ensure_receipt_quantities_zero_for_scan(self):
-        """ Ensure incoming receipt has Done quantities at 0 so scanning fills the order. """
-        for picking in self:
-            if (
-                picking.picking_type_code == 'incoming'
-                and picking.state not in ('done', 'cancel')
-                and picking.purchase_id
-                and picking.purchase_id.purchase_type != 'internal_po'
-            ):
-                has_partial_scans = any(0 < ml.quantity < ml.move_id.product_uom_qty for ml in picking.move_line_ids)
-                if not has_partial_scans and all(ml.quantity == ml.move_id.product_uom_qty for ml in picking.move_line_ids if ml.move_id.product_uom_qty > 0):
-                    picking.purchase_id._init_incoming_receipt_quantities()
+        return self._ensure_picking_quantities_zero_for_scan()
 
-    def action_open_receipt_qr_scan_wizard(self):
-        """ Open dedicated warehouse receipt kiosk scanner wizard """
+    def action_open_picking_qr_scan_wizard(self):
+        """ Open dedicated warehouse kiosk scanner wizard for any picking """
         self.ensure_one()
         if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
             raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.state in ('done', 'cancel'):
             raise UserError(_("This transfer is already in state '%s' and cannot be processed.") % self.state)
-        if self.is_receipt_locked_for_clearance:
+        if self.picking_type_code == 'incoming' and self.is_receipt_locked_for_clearance:
             stage_label = self._get_clearance_stage_label()
             raise UserError(_("⚠️ لا يمكن فتح نافذة مسح الاستلام حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط بعد وصول فاتورة المورد إلى مرحلة 'بدء التخليص (Clearance)'.") % stage_label)
 
-        self._ensure_receipt_quantities_zero_for_scan()
+        self._ensure_picking_quantities_zero_for_scan()
         wizard = self.env['stock.picking.qr.scan.wizard'].create({
             'picking_id': self.id,
         })
         wizard._populate_lines()
         return {
-            'name': _('Warehouse QR Receiving Scanner'),
+            'name': _('Warehouse QR Inventory Scanner'),
             'type': 'ir.actions.act_window',
             'res_model': 'stock.picking.qr.scan.wizard',
             'res_id': wizard.id,
             'view_mode': 'form',
             'target': 'new',
         }
+
+    def action_open_receipt_qr_scan_wizard(self):
+        return self.action_open_picking_qr_scan_wizard()
 
     def action_open_qr_scan_wizard(self):
         self.ensure_one()
@@ -242,9 +259,7 @@ class StockPicking(models.Model):
             if parent_action:
                 return parent_action()
             raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
-        if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_qr_scan_wizard'):
-            return self.action_open_receipt_qr_scan_wizard()
-        return super().action_open_qr_scan_wizard()
+        return self.action_open_picking_qr_scan_wizard()
 
     def action_process_qr_scan(self):
         """ Process scan from inline picking form view input """
@@ -256,17 +271,18 @@ class StockPicking(models.Model):
 
         payload = self.qr_scan_input.strip()
         self.qr_scan_input = False
-        res = self._process_qr_payload(payload)
+        res = self._process_picking_qr_payload(payload)
         return res
 
     def _parse_qr_payload(self, raw_string):
         """
         Parse QR payload supporting:
-        1. JSON: {"barcode": "...", "lot": "...", "exp": "YYYY-MM-DD", "qty": 1.0}
-        2. Delimited: PROD:code|LOT:lotname|EXP:YYYY-MM-DD|QTY:1.0
-           or Positional Delimited: PROD|LOT|QTY
-        3. GS1-128: (01)gtin(10)lot(17)YYMMDD or 01...10...17...
+        1. JSON: {"barcode": "...", "lot": "...", "exp": "YYYY-MM-DD"}
+        2. Delimited: PROD:code|LOT:lotname|EXP:YYYY-MM-DD
+           or Positional Delimited: PROD|LOT
+        3. GS1-128: (01)gtin(10)lot(17)YYMMDD
         4. Fallback: Plain lot name or product barcode
+        Note: Every valid scan increments exactly 1.0 unit.
         """
         data = {
             'product_barcode': None,
@@ -286,13 +302,12 @@ class StockPicking(models.Model):
                 data['product_id'] = parsed.get('pid') or parsed.get('product_id')
                 data['lot_name'] = parsed.get('l') or parsed.get('lot') or parsed.get('lot_name')
                 data['expiration_date'] = parsed.get('e') or parsed.get('exp') or parsed.get('expiration_date')
-                if 'q' in parsed or 'qty' in parsed or 'quantity' in parsed:
-                    data['quantity'] = float(parsed.get('q') or parsed.get('qty') or parsed.get('quantity') or 1.0)
+                data['quantity'] = 1.0
                 return data
             except Exception:
                 pass
 
-        # 2. Delimited string: PROD:...|LOT:...|EXP:...|QTY:... or Positional: CODE|LOT|QTY
+        # 2. Delimited string: PROD:...|LOT:...|EXP:... or Positional: CODE|LOT
         if '|' in raw_string or ':' in raw_string:
             parts = raw_string.split('|')
             has_keys = False
@@ -311,27 +326,15 @@ class StockPicking(models.Model):
                         data['expiration_date'] = v
                         has_keys = True
                     elif k in ('QTY', 'QUANTITY'):
-                        try:
-                            data['quantity'] = float(v)
-                        except ValueError:
-                            data['quantity'] = 1.0
-                        has_keys = True
+                        has_keys = True  # Recognized, but quantity is strictly fixed to 1.0
             if has_keys:
+                data['quantity'] = 1.0
                 return data
             elif len(parts) >= 2:
-                # Positional format: PROD_CODE|LOT_NAME|[QTY]
+                # Positional format: PROD_CODE|LOT_NAME
                 data['product_code'] = parts[0].strip()
                 data['lot_name'] = parts[1].strip()
-                if len(parts) >= 3:
-                    try:
-                        data['quantity'] = float(parts[2].strip())
-                    except ValueError:
-                        data['expiration_date'] = parts[2].strip()
-                if len(parts) >= 4:
-                    try:
-                        data['quantity'] = float(parts[3].strip())
-                    except ValueError:
-                        pass
+                data['quantity'] = 1.0
                 return data
 
         # 3. GS1-128 format with parentheses: (01)GTIN(10)LOT(17)YYMMDD
@@ -348,20 +351,22 @@ class StockPicking(models.Model):
                     data['expiration_date'] = datetime.strptime(yymmdd, '%y%m%d').strftime('%Y-%m-%d')
                 except ValueError:
                     pass
+            data['quantity'] = 1.0
             return data
 
         # 4. Fallback: treat raw string as lot name
         data['lot_name'] = raw_string
+        data['quantity'] = 1.0
         return data
 
-    def _process_receipt_qr_payload(self, raw_string):
-        """ Resolves parsed QR payload and updates picking move lines """
+    def _process_picking_qr_payload(self, raw_string):
+        """ Resolves parsed QR payload and updates picking move lines by exactly +1 unit """
         self.ensure_one()
         if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
             raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.state in ('done', 'cancel'):
-            raise UserError(_("Receipt '%s' is in state '%s' and cannot be modified.") % (self.name, self.state))
-        if self.is_receipt_locked_for_clearance:
+            raise UserError(_("Transfer '%s' is in state '%s' and cannot be modified.") % (self.name, self.state))
+        if self.picking_type_code == 'incoming' and self.is_receipt_locked_for_clearance:
             stage_label = self._get_clearance_stage_label()
             raise UserError(_("⚠️ لا يمكن مسح واستلام المواد لهذه الشحنة حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط بعد وصول فاتورة المورد إلى مرحلة 'بدء التخليص (Clearance)'.") % stage_label)
 
@@ -370,8 +375,7 @@ class StockPicking(models.Model):
         product_barcode = data.get('product_barcode')
         product_code = data.get('product_code')
         product_id = data.get('product_id')
-        exp_date_str = data.get('expiration_date')
-        qty_to_add = data.get('quantity') or 1.0
+        qty_to_add = 1.0  # Every single scan adds precisely 1 unit
 
         # Find matching stock move on this picking
         open_moves = self.move_ids.filtered(lambda m: m.state not in ('done', 'cancel'))
@@ -393,7 +397,7 @@ class StockPicking(models.Model):
                 lambda m: m.product_id.default_code == product_code or m.product_id.name == product_code
             )
 
-        # 4. Match by existing lot
+        # 4. Match by existing lot in open moves
         if not matched_move and lot_name:
             existing_lots = self.env['stock.lot'].search([
                 ('name', '=', lot_name),
@@ -407,8 +411,8 @@ class StockPicking(models.Model):
             matched_move = open_moves[0]
 
         if not matched_move:
-            msg = _("No matching move found on receipt %(receipt)s for scanned payload: %(payload)s") % {
-                'receipt': self.name,
+            msg = _("No matching move found on transfer %(transfer)s for scanned payload: %(payload)s") % {
+                'transfer': self.name,
                 'payload': raw_string,
             }
             self.qr_scan_status = msg
@@ -426,10 +430,25 @@ class StockPicking(models.Model):
         matched_move = matched_move[0]
         product = matched_move.product_id
 
-        # Find or match stock.lot
+        # Find and verify stock.lot
         lot = False
-        if lot_name:
-            # First check if the move already has this lot assigned
+        if product.tracking in ('lot', 'serial'):
+            if not lot_name:
+                msg = _("Product '%(product)s' requires a Lot/Serial number, but none was provided in the scan.") % {
+                    'product': product.display_name,
+                }
+                self.qr_scan_status = msg
+                return {
+                    'type': 'ir.actions.client',
+                    'tag': 'display_notification',
+                    'params': {
+                        'title': _('Lot Required'),
+                        'message': msg,
+                        'type': 'warning',
+                        'sticky': False,
+                    }
+                }
+
             clean_raw = raw_string.strip()
             existing_move_lots = (matched_move.lot_ids | matched_move.move_line_ids.lot_id).filtered(
                 lambda l: l.name == lot_name or (getattr(l, 'qr_code_value', False) and l.qr_code_value == clean_raw)
@@ -445,76 +464,136 @@ class StockPicking(models.Model):
                     domain.extend(['|', ('company_id', '=', False), ('company_id', '=', self.company_id.id)])
                 lot = self.env['stock.lot'].search(domain, limit=1)
 
-            clean_exp_str = exp_date_str.replace(' ', '') if exp_date_str else False
-
+            # Enforce lot must pre-exist: NO automatic lot creation upon scanning
             if not lot:
-                lot_vals = {
-                    'name': lot_name,
-                    'product_id': product.id,
+                msg = _("Lot/Serial number '%(lot)s' does not exist in inventory for '%(product)s'. Lots must be created and established before scanning.") % {
+                    'lot': lot_name,
+                    'product': product.display_name,
                 }
-                if self.company_id:
-                    lot_vals['company_id'] = self.company_id.id
-                if clean_exp_str:
-                    try:
-                        lot_vals['expiration_date'] = fields.Datetime.to_datetime(clean_exp_str)
-                    except Exception:
-                        pass
-                lot = self.env['stock.lot'].create(lot_vals)
-            elif clean_exp_str and not lot.expiration_date:
-                try:
-                    lot.expiration_date = fields.Datetime.to_datetime(clean_exp_str)
-                except Exception:
-                    pass
+                self.qr_scan_status = msg
+                return {
+                    'type': 'ir.actions.client',
+                    'tag': 'display_notification',
+                    'params': {
+                        'title': _('Unknown Lot Number'),
+                        'message': msg,
+                        'type': 'danger',
+                        'sticky': False,
+                    }
+                }
 
-        # Update or create stock.move.line
+        # Check over-scanning: Block if adding 1 unit exceeds demanded quantity
+        precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')
+        current_done = matched_move.quantity
+        demand = matched_move.product_uom_qty
+        if float_compare(current_done + qty_to_add, demand, precision_digits=precision) > 0:
+            msg = _("Cannot scan: Required quantity (%(demand)s) for '%(product)s' is already fulfilled (Done: %(done)s). Over-scanning is strictly blocked.") % {
+                'demand': demand,
+                'product': product.display_name,
+                'done': current_done,
+            }
+            self.qr_scan_status = msg
+            return {
+                'type': 'ir.actions.client',
+                'tag': 'display_notification',
+                'params': {
+                    'title': _('Over-scan Blocked'),
+                    'message': msg,
+                    'type': 'danger',
+                    'sticky': False,
+                }
+            }
+
+        # Serial duplicate scan prevention
+        if product.tracking == 'serial' and lot:
+            existing_serial_ml = matched_move.move_line_ids.filtered(lambda ml: ml.lot_id == lot and ml.quantity > 0)
+            if existing_serial_ml:
+                msg = _("Serial number '%(lot)s' has already been scanned for '%(product)s'.") % {
+                    'lot': lot.name,
+                    'product': product.display_name,
+                }
+                self.qr_scan_status = msg
+                return {
+                    'type': 'ir.actions.client',
+                    'tag': 'display_notification',
+                    'params': {
+                        'title': _('Serial Already Scanned'),
+                        'message': msg,
+                        'type': 'danger',
+                        'sticky': False,
+                    }
+                }
+
+        # Update or create stock.move.line by adding precisely 1 unit
         move_line = False
+        uom_id = (getattr(matched_move, 'product_uom', False) or getattr(matched_move, 'product_uom_id', False)).id
         if lot:
-            move_line = matched_move.move_line_ids.filtered(lambda ml: ml.lot_id == lot)
-            if not move_line:
-                # Check for an empty lot move line to claim
+            if product.tracking == 'serial':
                 empty_ml = matched_move.move_line_ids.filtered(lambda ml: not ml.lot_id and ml.quantity == 0)
                 if empty_ml:
                     move_line = empty_ml[0]
-                    move_line.write({'lot_id': lot.id, 'quantity': qty_to_add})
+                    move_line.write({'lot_id': lot.id, 'quantity': 1.0, 'picked': True})
                 else:
                     move_line = self.env['stock.move.line'].create({
                         'move_id': matched_move.id,
                         'picking_id': self.id,
                         'product_id': product.id,
-                        'product_uom_id': (getattr(matched_move, 'product_uom', False) or getattr(matched_move, 'product_uom_id', False)).id,
+                        'product_uom_id': uom_id,
                         'location_id': matched_move.location_id.id,
                         'location_dest_id': matched_move.location_dest_id.id,
                         'lot_id': lot.id,
-                        'quantity': qty_to_add,
+                        'quantity': 1.0,
+                        'picked': True,
                     })
             else:
-                move_line = move_line[0]
-                move_line.quantity += qty_to_add
+                existing_ml = matched_move.move_line_ids.filtered(lambda ml: ml.lot_id == lot)
+                if existing_ml:
+                    move_line = existing_ml[0]
+                    move_line.quantity += 1.0
+                    move_line.picked = True
+                else:
+                    empty_ml = matched_move.move_line_ids.filtered(lambda ml: not ml.lot_id and ml.quantity == 0)
+                    if empty_ml:
+                        move_line = empty_ml[0]
+                        move_line.write({'lot_id': lot.id, 'quantity': 1.0, 'picked': True})
+                    else:
+                        move_line = self.env['stock.move.line'].create({
+                            'move_id': matched_move.id,
+                            'picking_id': self.id,
+                            'product_id': product.id,
+                            'product_uom_id': uom_id,
+                            'location_id': matched_move.location_id.id,
+                            'location_dest_id': matched_move.location_dest_id.id,
+                            'lot_id': lot.id,
+                            'quantity': 1.0,
+                            'picked': True,
+                        })
         else:
-            # Non-lot product scan or unassigned lot
+            # Non-tracked product scan
             if matched_move.move_line_ids:
                 move_line = matched_move.move_line_ids[0]
-                move_line.quantity += qty_to_add
+                move_line.quantity += 1.0
+                move_line.picked = True
             else:
                 move_line = self.env['stock.move.line'].create({
                     'move_id': matched_move.id,
                     'picking_id': self.id,
                     'product_id': product.id,
-                    'product_uom_id': (getattr(matched_move, 'product_uom', False) or getattr(matched_move, 'product_uom_id', False)).id,
+                    'product_uom_id': uom_id,
                     'location_id': matched_move.location_id.id,
                     'location_dest_id': matched_move.location_dest_id.id,
-                    'quantity': qty_to_add,
+                    'quantity': 1.0,
+                    'picked': True,
                 })
 
-        # Update move lot_ids if needed
+        # Register lot on move if needed
         if lot and lot not in matched_move.lot_ids:
             matched_move.lot_ids = [(4, lot.id)]
 
         matched_move.invalidate_recordset(['quantity'])
-        status_msg = _("✓ Scanned %(product)s | Lot: %(lot)s | Qty: +%(qty)s (Done: %(done)s / %(demand)s)") % {
+        status_msg = _("✓ Scanned %(product)s | Lot: %(lot)s | +1 Unit (Done: %(done)s / %(demand)s)") % {
             'product': product.display_name,
             'lot': lot.name if lot else _('N/A'),
-            'qty': qty_to_add,
             'done': matched_move.quantity,
             'demand': matched_move.product_uom_qty,
         }
@@ -531,6 +610,9 @@ class StockPicking(models.Model):
             }
         }
 
+    def _process_receipt_qr_payload(self, raw_string):
+        return self._process_picking_qr_payload(raw_string)
+
     def _process_qr_payload(self, raw_string):
         self.ensure_one()
         if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
@@ -538,21 +620,19 @@ class StockPicking(models.Model):
             if parent_processor:
                 return parent_processor(raw_string)
             raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
-        if self.picking_type_code == 'incoming' or not hasattr(super(), '_process_qr_payload'):
-            return self._process_receipt_qr_payload(raw_string)
-        return super()._process_qr_payload(raw_string)
+        return self._process_picking_qr_payload(raw_string)
 
-    def action_open_receipt_mobile_qr_scan_wizard(self):
-        """ Open dedicated mobile camera QR scanner for warehouse receipts """
+    def action_open_picking_mobile_qr_wizard(self):
+        """ Open dedicated mobile camera QR scanner for any transfer """
         self.ensure_one()
         if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
             raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
         if self.state in ('done', 'cancel'):
             raise UserError(_("Transfer '%s' is in state '%s' and cannot be processed.") % (self.name, self.state))
-        if self.is_receipt_locked_for_clearance:
+        if self.picking_type_code == 'incoming' and self.is_receipt_locked_for_clearance:
             stage_label = self._get_clearance_stage_label()
-            raise UserError(_("⚠️ لا يمكن فتح كاميرا المسح للاستلام حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط بعد وصول فاتورة المورد إلى مرحلة 'بدء التخليص (Clearance)'.") % stage_label)
-        self._ensure_receipt_quantities_zero_for_scan()
+            raise UserError(_("⚠️ لا يمكن فتح كاميرا المسح حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط بعد وصول فاتورة المورد إلى مرحلة 'بدء التخليص (Clearance)'.") % stage_label)
+        self._ensure_picking_quantities_zero_for_scan()
         wizard = self.env['stock.picking.mobile.qr.wizard'].create({
             'picking_id': self.id,
         })
@@ -565,6 +645,9 @@ class StockPicking(models.Model):
             'target': 'new',
         }
 
+    def action_open_receipt_mobile_qr_scan_wizard(self):
+        return self.action_open_picking_mobile_qr_wizard()
+
     def action_open_mobile_qr_scan_wizard(self):
         self.ensure_one()
         if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
@@ -572,6 +655,4 @@ class StockPicking(models.Model):
             if parent_action:
                 return parent_action()
             raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
-        if self.picking_type_code == 'incoming' or not hasattr(super(), 'action_open_mobile_qr_scan_wizard'):
-            return self.action_open_receipt_mobile_qr_scan_wizard()
-        return super().action_open_mobile_qr_scan_wizard()
+        return self.action_open_picking_mobile_qr_wizard()

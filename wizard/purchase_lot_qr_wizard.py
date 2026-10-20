@@ -15,7 +15,12 @@ class PurchaseLotQrWizard(models.TransientModel):
     )
     picking_id = fields.Many2one(
         'stock.picking',
-        string='Stock Receipt',
+        string='Stock Transfer',
+        readonly=True
+    )
+    sale_id = fields.Many2one(
+        'sale.order',
+        string='Sales Order',
         readonly=True
     )
     layout_type = fields.Selection([
@@ -25,7 +30,7 @@ class PurchaseLotQrWizard(models.TransientModel):
     ], string='Label Format', default='thermal_50x30', required=True)
 
     payload_format = fields.Selection([
-        ('delimited', 'Structured Delimited (PROD|LOT|EXP|QTY)'),
+        ('delimited', 'Structured Delimited (PROD|LOT|EXP)'),
         ('json', 'Structured JSON'),
         ('plain_lot', 'Plain Lot Number'),
     ], string='QR Payload Format', default='delimited', required=True)
@@ -187,10 +192,9 @@ class PurchaseLotQrWizardLine(models.TransientModel):
                     'b': bc,
                     'l': lot,
                     'e': exp_str,
-                    'q': qty,
                 }
                 line.qr_code_value = json.dumps(payload, separators=(',', ':'))
             elif payload_fmt == 'plain_lot':
                 line.qr_code_value = lot
             else:  # delimited
-                line.qr_code_value = f"PROD:{bc}|LOT:{lot}|EXP:{exp_str}|QTY:{qty}"
+                line.qr_code_value = f"PROD:{bc}|LOT:{lot}|EXP:{exp_str}"

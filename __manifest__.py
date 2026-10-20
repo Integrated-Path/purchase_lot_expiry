@@ -33,6 +33,7 @@ This module enables end-to-end management of Lot/Serial Numbers and Expiration D
         'wizard/stock_picking_mobile_qr_wizard_views.xml',
         'views/purchase_order_views.xml',
         'views/stock_picking_views.xml',
+        'views/stock_lot_views.xml',
         'views/account_move_views.xml',
         'views/stock_lot_views.xml',
         'views/account_journal_form_views.xml'

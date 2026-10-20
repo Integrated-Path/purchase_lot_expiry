@@ -4,7 +4,7 @@
         <field name="name">stock.picking.mobile.qr.wizard.form</field>
         <field name="model">stock.picking.mobile.qr.wizard</field>
         <field name="arch" type="xml">
-            <form string="Mobile QR Receipt Scanner">
+            <form string="Mobile QR Scanner">
                 <sheet>
                     <div class="row align-items-center mb-2 px-1">
                         <div class="col-7">
@@ -34,7 +34,7 @@
                     </div>
 
                     <notebook>
-                        <page string="Receipt Progress">
+                        <page string="Fulfillment Progress">
                             <field name="line_ids">
                                 <list decoration-success="is_fulfilled" decoration-info="not is_fulfilled and done_qty &gt; 0">
                                     <field name="product_id"/>
@@ -48,7 +48,7 @@
                     </notebook>
                 </sheet>
                 <footer>
-                    <button name="action_validate_transfer" string="Validate Receipt" type="object" class="btn btn-success btn-lg flex-fill" icon="fa-check" invisible="not is_all_fulfilled"/>
+                    <button name="action_validate_transfer" string="Validate Transfer" type="object" class="btn btn-success btn-lg flex-fill" icon="fa-check" invisible="not is_all_fulfilled"/>
                     <button string="Close Scanner" class="btn btn-secondary btn-lg flex-fill" special="cancel"/>
                 </footer>
             </form>
