@@ -9,6 +9,60 @@ from odoo.tools import float_compare
 
 from .purchase_order import LOGISTICS_STAGES
 
+# Mapping of Arabic keyboard layout (Windows/Linux Arabic 101/102) to English QWERTY
+AR_TO_EN_KEYBOARD_MAP = {
+    # Lowercase / unshifted
+    'ذ': '`', 'ض': 'q', 'ص': 'w', 'ث': 'e', 'ق': 'r', 'ف': 't', 'غ': 'y', 'ع': 'u',
+    'ه': 'i', 'خ': 'o', 'ح': 'p', 'ج': '[', 'د': ']', 'ش': 'a', 'س': 's', 'ي': 'd',
+    'ب': 'f', 'ل': 'g', 'ا': 'h', 'ت': 'j', 'ن': 'k', 'م': 'l', 'ك': ';', 'ط': "'",
+    'ئ': 'z', 'ء': 'x', 'ؤ': 'c', 'ر': 'v', 'لا': 'b', 'ى': 'n', 'ة': 'm', 'و': ',',
+    'ز': '.', 'ظ': '/',
+    # Shifted
+    'َ': 'Q', 'ً': 'W', 'ُ': 'E', 'ٌ': 'R', 'لإ': 'T', 'إ': 'Y', '‘': 'U', '÷': 'I',
+    '×': 'O', '؛': 'P', '<': '{', '>': '}', 'ِ': 'A', 'ٍ': 'S', ']': 'D', '[': 'F',
+    'لأ': 'G', 'أ': 'H', 'ـ': 'J', '،': 'K', '/': 'L', ':': ':', '"': '"', 'ْ': 'X',
+    '}': 'C', '{': 'V', 'لآ': 'B', 'آ': 'N', "'": 'M', ',': '<', '.': '>', '؟': '?',
+    # Arabic Ligatures
+    '\uFEF5': 'B', '\uFEF6': 'B', '\uFEF7': 'G', '\uFEF8': 'G',
+    '\uFEF9': 'T', '\uFEFA': 'T', '\uFEFB': 'b', '\uFEFC': 'b',
+    # Arabic-Indic and Persian digits
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4', '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+    '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4', '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9',
+}
+
+
+def normalize_arabic_scanner_input(raw_string):
+    """ Translates keystrokes typed by barcode scanner when active keyboard is Arabic """
+    if not raw_string:
+        return raw_string
+    chars = []
+    i = 0
+    n = len(raw_string)
+    while i < n:
+        if i + 1 < n and raw_string[i:i+2] in AR_TO_EN_KEYBOARD_MAP:
+            chars.append(AR_TO_EN_KEYBOARD_MAP[raw_string[i:i+2]])
+            i += 2
+        elif raw_string[i] in AR_TO_EN_KEYBOARD_MAP:
+            chars.append(AR_TO_EN_KEYBOARD_MAP[raw_string[i]])
+            i += 1
+        else:
+            chars.append(raw_string[i])
+            i += 1
+    return "".join(chars)
+
+
+def normalize_date_str(date_str):
+    """ Normalize date strings into standard YYYY-MM-DD """
+    if not date_str:
+        return None
+    d_clean = str(date_str).strip()
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d', '%y%m%d', '%Y%m%d'):
+        try:
+            return datetime.strptime(d_clean, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            pass
+    return d_clean
+
 
 class StockPicking(models.Model):
     _inherit = 'stock.picking'
@@ -283,6 +337,7 @@ class StockPicking(models.Model):
         3. GS1-128: (01)gtin(10)lot(17)YYMMDD
         4. Fallback: Plain lot name or product barcode
         Note: Every valid scan increments exactly 1.0 unit.
+        Automatically converts Arabic keyboard layout keystrokes.
         """
         data = {
             'product_barcode': None,
@@ -293,23 +348,27 @@ class StockPicking(models.Model):
             'quantity': 1.0,
         }
 
+        # Auto-convert Arabic keyboard layout
+        clean_str = normalize_arabic_scanner_input(raw_string.strip())
+
         # 1. JSON
-        if raw_string.startswith('{') and raw_string.endswith('}'):
+        if clean_str.startswith('{') and clean_str.endswith('}'):
             try:
-                parsed = json.loads(raw_string)
+                parsed = json.loads(clean_str)
                 data['product_barcode'] = parsed.get('b') or parsed.get('barcode')
                 data['product_code'] = parsed.get('c') or parsed.get('code')
                 data['product_id'] = parsed.get('pid') or parsed.get('product_id')
                 data['lot_name'] = parsed.get('l') or parsed.get('lot') or parsed.get('lot_name')
-                data['expiration_date'] = parsed.get('e') or parsed.get('exp') or parsed.get('expiration_date')
+                exp = parsed.get('e') or parsed.get('exp') or parsed.get('expiration_date')
+                data['expiration_date'] = normalize_date_str(exp)
                 data['quantity'] = 1.0
                 return data
             except Exception:
                 pass
 
         # 2. Delimited string: PROD:...|LOT:...|EXP:... or Positional: CODE|LOT
-        if '|' in raw_string or ':' in raw_string:
-            parts = raw_string.split('|')
+        if '|' in clean_str or ':' in clean_str:
+            parts = clean_str.split('|')
             has_keys = False
             for part in parts:
                 if ':' in part:
@@ -319,11 +378,14 @@ class StockPicking(models.Model):
                     if k in ('PROD', 'PRODUCT', 'BC', 'BARCODE'):
                         data['product_barcode'] = v
                         has_keys = True
+                    elif k in ('CODE', 'REF', 'DEFAULT_CODE', 'PART_NUMBER'):
+                        data['product_code'] = v
+                        has_keys = True
                     elif k in ('LOT', 'SERIAL', 'SN'):
                         data['lot_name'] = v
                         has_keys = True
                     elif k in ('EXP', 'EXPIRY', 'DATE'):
-                        data['expiration_date'] = v
+                        data['expiration_date'] = normalize_date_str(v)
                         has_keys = True
                     elif k in ('QTY', 'QUANTITY'):
                         has_keys = True  # Recognized, but quantity is strictly fixed to 1.0
@@ -338,24 +400,21 @@ class StockPicking(models.Model):
                 return data
 
         # 3. GS1-128 format with parentheses: (01)GTIN(10)LOT(17)YYMMDD
-        gs1_match = re.search(r'\(01\)(\d{14})', raw_string)
+        gs1_match = re.search(r'\(01\)(\d{14})', clean_str)
         if gs1_match:
             data['product_barcode'] = gs1_match.group(1).lstrip('0')
-            lot_match = re.search(r'\(10\)([^()]+)', raw_string)
+            lot_match = re.search(r'\(10\)([^()]+)', clean_str)
             if lot_match:
                 data['lot_name'] = lot_match.group(1)
-            exp_match = re.search(r'\(17\)(\d{6})', raw_string)
+            exp_match = re.search(r'\(17\)(\d{6})', clean_str)
             if exp_match:
                 yymmdd = exp_match.group(1)
-                try:
-                    data['expiration_date'] = datetime.strptime(yymmdd, '%y%m%d').strftime('%Y-%m-%d')
-                except ValueError:
-                    pass
+                data['expiration_date'] = normalize_date_str(yymmdd)
             data['quantity'] = 1.0
             return data
 
         # 4. Fallback: treat raw string as lot name
-        data['lot_name'] = raw_string
+        data['lot_name'] = clean_str
         data['quantity'] = 1.0
         return data
 
@@ -370,7 +429,8 @@ class StockPicking(models.Model):
             stage_label = self._get_clearance_stage_label()
             raise UserError(_("⚠️ لا يمكن مسح واستلام المواد لهذه الشحنة حالياً.\nالشحنة في مرحلة: [%s].\nالاستلام متاح فقط بعد وصول فاتورة المورد إلى مرحلة 'بدء التخليص (Clearance)'.") % stage_label)
 
-        data = self._parse_qr_payload(raw_string)
+        clean_string = normalize_arabic_scanner_input(raw_string.strip())
+        data = self._parse_qr_payload(clean_string)
         lot_name = data.get('lot_name')
         product_barcode = data.get('product_barcode')
         product_code = data.get('product_code')
@@ -385,11 +445,19 @@ class StockPicking(models.Model):
         if product_id:
             matched_move = open_moves.filtered(lambda m: m.product_id.id == product_id)
 
-        # 2. Match by barcode or default_code
-        if not matched_move and product_barcode:
-            matched_move = open_moves.filtered(
-                lambda m: m.product_id.barcode == product_barcode or m.product_id.default_code == product_barcode
-            )
+        # 2. Match by candidate codes (barcode, default_code, part_number, unpadded codes)
+        candidate_codes = [c for c in (product_barcode, product_code) if c]
+        for c in list(candidate_codes):
+            if c.lstrip('0') and c.lstrip('0') != c:
+                candidate_codes.append(c.lstrip('0'))
+
+        if not matched_move and candidate_codes:
+            for code in candidate_codes:
+                matched_move = open_moves.filtered(
+                    lambda m: m.product_id.barcode == code or m.product_id.default_code == code or (hasattr(m.product_id, 'part_number') and m.product_id.part_number == code)
+                )
+                if matched_move:
+                    break
 
         # 3. Match by default_code
         if not matched_move and product_code:
@@ -449,20 +517,25 @@ class StockPicking(models.Model):
                     }
                 }
 
-            clean_raw = raw_string.strip()
+            clean_raw = clean_string
             existing_move_lots = (matched_move.lot_ids | matched_move.move_line_ids.lot_id).filtered(
-                lambda l: l.name == lot_name or (getattr(l, 'qr_code_value', False) and l.qr_code_value == clean_raw)
+                lambda l: l.name == lot_name or (lot_name.lstrip('0') and l.name == lot_name.lstrip('0')) or (getattr(l, 'qr_code_value', False) and l.qr_code_value in (clean_raw, raw_string))
             )
             if existing_move_lots:
                 lot = existing_move_lots[0]
             else:
                 domain = [
-                    '|', ('name', '=', lot_name), ('qr_code_value', '=', clean_raw),
+                    '|', '|', ('name', '=', lot_name), ('qr_code_value', '=', clean_raw), ('qr_code_value', '=', raw_string),
                     ('product_id', '=', product.id),
                 ]
                 if self.company_id:
                     domain.extend(['|', ('company_id', '=', False), ('company_id', '=', self.company_id.id)])
                 lot = self.env['stock.lot'].search(domain, limit=1)
+                if not lot and lot_name.lstrip('0') and lot_name.lstrip('0') != lot_name:
+                    alt_domain = [('name', '=', lot_name.lstrip('0')), ('product_id', '=', product.id)]
+                    if self.company_id:
+                        alt_domain.extend(['|', ('company_id', '=', False), ('company_id', '=', self.company_id.id)])
+                    lot = self.env['stock.lot'].search(alt_domain, limit=1)
 
             # Enforce lot must pre-exist: NO automatic lot creation upon scanning
             if not lot:
