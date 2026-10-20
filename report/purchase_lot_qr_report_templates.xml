@@ -7,77 +7,99 @@
                 <t t-if="wizard.layout_type == 'thermal_50x30'">
                     <style>
                         body {
-                            margin: 0;
-                            padding: 0;
+                            margin: 0 auto !important;
+                            padding: 0 !important;
                             font-family: Arial, Helvetica, sans-serif;
+                            direction: ltr !important;
+                        }
+                        div.article {
+                            margin: 0 auto !important;
+                            padding: 0 !important;
                         }
                         .page-thermal-50x30 {
                             width: 48mm;
                             height: 28mm;
+                            margin: 0 auto !important;
                             page-break-after: always;
                             page-break-inside: avoid;
                             overflow: hidden;
                             box-sizing: border-box;
+                            direction: ltr !important;
+                            text-align: left !important;
                         }
                         .tbl-50x30 {
                             width: 100%;
                             height: 28mm;
                             border-collapse: collapse;
                             table-layout: fixed;
+                            direction: ltr !important;
+                            margin: 0 auto !important;
                         }
                         .tbl-50x30 td {
                             vertical-align: middle;
                             padding: 0;
                         }
-                        .col-qr-50x30 {
-                            width: 22mm;
-                            text-align: center;
-                        }
-                        .col-qr-50x30 img {
-                            width: 21mm;
-                            height: 21mm;
-                            display: block;
-                            margin: 0 auto;
-                        }
                         .col-info-50x30 {
-                            width: 26mm;
-                            padding-left: 2mm !important;
+                            width: 27.5mm;
+                            padding: 0.8mm 1.5mm 0.8mm 1mm !important;
                             font-size: 6.5pt;
                             line-height: 1.15;
                             color: #000;
-                            overflow: hidden;
+                            vertical-align: middle;
+                            direction: ltr !important;
+                            text-align: left !important;
+                            box-sizing: border-box;
+                        }
+                        .col-qr-50x30 {
+                            width: 20.5mm;
+                            text-align: center;
+                            vertical-align: middle;
+                            direction: ltr !important;
+                            box-sizing: border-box;
+                        }
+                        .col-qr-50x30 img {
+                            width: 19.5mm;
+                            height: 19.5mm;
+                            display: block;
+                            margin: 0 auto;
                         }
                         .prod-name-50 {
                             font-weight: bold;
-                            font-size: 7pt;
-                            white-space: nowrap;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
-                            max-width: 25mm;
+                            font-size: 6.5pt;
+                            line-height: 1.15;
+                            color: #000;
+                            white-space: normal !important;
+                            word-wrap: break-word !important;
+                            word-break: break-word !important;
+                            overflow-wrap: break-word !important;
+                            text-overflow: clip !important;
+                            width: auto !important;
+                            max-width: 100% !important;
+                            height: auto !important;
+                            max-height: none !important;
+                            overflow: visible !important;
+                            margin: 0 0 1mm 0 !important;
                         }
                         .sku-50 {
-                            font-size: 5.5pt;
-                            color: #555;
-                            white-space: nowrap;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
+                            font-size: 6pt;
+                            color: #444;
+                            white-space: normal;
+                            word-wrap: break-word;
+                            margin: 0 0 0.8mm 0;
                         }
                         .lot-50 {
                             font-weight: bold;
                             font-size: 7.5pt;
                             color: #000;
-                            white-space: nowrap;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
+                            white-space: normal;
+                            word-wrap: break-word;
+                            margin: 0 0 0.8mm 0;
                         }
                         .exp-50 {
                             font-weight: bold;
                             font-size: 6.5pt;
                             color: #b00;
-                        }
-                        .qty-50 {
-                            font-size: 6pt;
-                            color: #333;
+                            margin: 0;
                         }
                     </style>
 
@@ -86,9 +108,6 @@
                             <div class="page-thermal-50x30">
                                 <table class="tbl-50x30">
                                     <tr>
-                                        <td class="col-qr-50x30">
-                                            <img t-att-src="'/report/barcode/?barcode_type=QR&amp;value=%s' % line.qr_code_value" alt="QR Code"/>
-                                        </td>
                                         <td class="col-info-50x30">
                                             <div class="prod-name-50" t-att-title="line.product_id.display_name">
                                                 <t t-out="line.product_id.name"/>
@@ -103,6 +122,9 @@
                                                 EXP: <span t-field="line.expiration_date" t-options='{"widget": "date"}'/>
                                             </div>
                                         </td>
+                                        <td class="col-qr-50x30">
+                                            <img t-att-src="'/report/barcode/?barcode_type=QR&amp;value=%s' % line.qr_code_value" alt="QR Code"/>
+                                        </td>
                                     </tr>
                                 </table>
                             </div>
@@ -114,67 +136,91 @@
                 <t t-elif="wizard.layout_type == 'thermal_40x20'">
                     <style>
                         body {
-                            margin: 0;
-                            padding: 0;
+                            margin: 0 auto !important;
+                            padding: 0 !important;
                             font-family: Arial, Helvetica, sans-serif;
+                            direction: ltr !important;
+                        }
+                        div.article {
+                            margin: 0 auto !important;
+                            padding: 0 !important;
                         }
                         .page-thermal-40x20 {
                             width: 38mm;
                             height: 18mm;
+                            margin: 0 auto !important;
                             page-break-after: always;
                             page-break-inside: avoid;
                             overflow: hidden;
                             box-sizing: border-box;
+                            direction: ltr !important;
+                            text-align: left !important;
                         }
                         .tbl-40x20 {
                             width: 100%;
                             height: 18mm;
                             border-collapse: collapse;
                             table-layout: fixed;
+                            direction: ltr !important;
+                            margin: 0 auto !important;
                         }
                         .tbl-40x20 td {
                             vertical-align: middle;
                             padding: 0;
                         }
-                        .col-qr-40x20 {
-                            width: 17mm;
-                            text-align: center;
-                        }
-                        .col-qr-40x20 img {
-                            width: 16mm;
-                            height: 16mm;
-                            display: block;
-                            margin: 0 auto;
-                        }
                         .col-info-40x20 {
-                            width: 21mm;
-                            padding-left: 1mm !important;
+                            width: 23mm;
+                            padding: 0.5mm 1mm 0.5mm 0.8mm !important;
                             font-size: 5pt;
                             line-height: 1.1;
                             color: #000;
-                            overflow: hidden;
+                            vertical-align: middle;
+                            direction: ltr !important;
+                            text-align: left !important;
+                            box-sizing: border-box;
+                        }
+                        .col-qr-40x20 {
+                            width: 15mm;
+                            text-align: center;
+                            vertical-align: middle;
+                            direction: ltr !important;
+                            box-sizing: border-box;
+                        }
+                        .col-qr-40x20 img {
+                            width: 14mm;
+                            height: 14mm;
+                            display: block;
+                            margin: 0 auto;
                         }
                         .prod-name-40 {
                             font-weight: bold;
                             font-size: 5.5pt;
-                            white-space: nowrap;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
-                            max-width: 20mm;
+                            line-height: 1.1;
+                            white-space: normal !important;
+                            word-wrap: break-word !important;
+                            word-break: break-word !important;
+                            overflow-wrap: break-word !important;
+                            text-overflow: clip !important;
+                            width: auto !important;
+                            max-width: 100% !important;
+                            height: auto !important;
+                            max-height: none !important;
+                            overflow: visible !important;
+                            margin: 0 0 0.5mm 0 !important;
                         }
                         .lot-40 {
                             font-weight: bold;
                             font-size: 6pt;
                             color: #000;
+                            white-space: normal;
+                            word-wrap: break-word;
+                            margin: 0 0 0.3mm 0;
                         }
                         .exp-40 {
                             font-weight: bold;
                             font-size: 5.5pt;
                             color: #b00;
-                        }
-                        .qty-40 {
-                            font-size: 5pt;
-                            color: #333;
+                            margin: 0;
                         }
                     </style>
 
@@ -183,9 +229,6 @@
                             <div class="page-thermal-40x20">
                                 <table class="tbl-40x20">
                                     <tr>
-                                        <td class="col-qr-40x20">
-                                            <img t-att-src="'/report/barcode/?barcode_type=QR&amp;value=%s' % line.qr_code_value" alt="QR Code"/>
-                                        </td>
                                         <td class="col-info-40x20">
                                             <div class="prod-name-40" t-att-title="line.product_id.display_name">
                                                 <t t-out="line.product_id.name"/>
@@ -196,6 +239,9 @@
                                             <div class="exp-40" t-if="line.expiration_date">
                                                 E: <span t-field="line.expiration_date" t-options='{"widget": "date"}'/>
                                             </div>
+                                        </td>
+                                        <td class="col-qr-40x20">
+                                            <img t-att-src="'/report/barcode/?barcode_type=QR&amp;value=%s' % line.qr_code_value" alt="QR Code"/>
                                         </td>
                                     </tr>
                                 </table>
@@ -218,10 +264,13 @@
                             box-sizing: border-box;
                             page-break-inside: avoid;
                             font-family: Arial, Helvetica, sans-serif;
+                            direction: ltr !important;
+                            text-align: left !important;
                         }
                         .avery-tbl {
                             width: 100%;
                             border-collapse: collapse;
+                            direction: ltr !important;
                         }
                         .avery-tbl td {
                             vertical-align: top;
@@ -230,16 +279,31 @@
                             width: 25mm;
                             height: 25mm;
                         }
+                        .prod-name-avery {
+                            font-weight: bold;
+                            font-size: 8.5pt;
+                            line-height: 1.2;
+                            white-space: normal !important;
+                            word-wrap: break-word !important;
+                            word-break: break-word !important;
+                            overflow-wrap: break-word !important;
+                            text-overflow: clip !important;
+                            width: auto !important;
+                            max-width: 100% !important;
+                            height: auto !important;
+                            overflow: visible !important;
+                            margin: 0 0 auto 0 !important;
+                        }
                     </style>
 
-                    <div style="width: 100%; clear: both;">
+                    <div style="width: 100%; clear: both; direction: ltr !important;">
                         <t t-foreach="wizard.line_ids.filtered(lambda l: l.is_selected and l.copies > 0)" t-as="line">
                             <t t-foreach="range(line.copies)" t-as="copy_idx">
                                 <div class="avery-box">
                                     <table class="avery-tbl">
                                         <tr>
-                                            <td style="width: 55%;">
-                                                <div style="font-weight: bold; font-size: 8.5pt; line-height: 1.2;">
+                                            <td style="width: 55%; vertical-align: top;">
+                                                <div class="prod-name-avery">
                                                     <t t-out="line.product_id.name"/>
                                                 </div>
                                                 <div style="font-size: 7pt; color: #555; margin-top: 1mm;" t-if="line.product_code">
@@ -249,7 +313,7 @@
                                                     BC: <t t-out="line.product_barcode"/>
                                                 </div>
                                             </td>
-                                            <td style="width: 45%; text-align: right;">
+                                            <td style="width: 45%; text-align: right; vertical-align: top;">
                                                 <img class="avery-qr" t-att-src="'/report/barcode/?barcode_type=QR&amp;value=%s' % line.qr_code_value" alt="QR Code"/>
                                             </td>
                                         </tr>
