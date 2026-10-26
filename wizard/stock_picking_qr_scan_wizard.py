@@ -139,6 +139,8 @@ class StockPickingQrScanWizard(models.TransientModel):
         return res
 
     def _ensure_external_purchase(self):
+        if self.picking_id.picking_type_code == 'internal':
+            raise UserError(_("Custom QR receiving is not available for internal operations."))
         if (
             self.picking_id.purchase_id
             and self.picking_id.purchase_id.purchase_type == 'internal_po'

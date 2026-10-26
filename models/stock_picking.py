@@ -194,8 +194,8 @@ class StockPicking(models.Model):
     def action_open_purchase_lot_qr_wizard(self):
         """ Open QR Label generation wizard pre-filled with lots from this transfer """
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
-            raise UserError(_("QR label generation is not available for internal purchase receipts."))
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
+            raise UserError(_("QR label generation is not available for internal operations."))
         wizard_lines = []
         # First gather from stock.move.lines
         for ml in self.move_line_ids.filtered(lambda l: l.lot_id or l.lot_name):
@@ -246,17 +246,22 @@ class StockPicking(models.Model):
 
     def action_open_lot_qr_wizard(self):
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
             parent_action = getattr(super(), 'action_open_lot_qr_wizard', None)
             if parent_action:
                 return parent_action()
-            raise UserError(_("QR label generation is not available for internal purchase receipts."))
+            raise UserError(_("QR label generation is not available for internal operations."))
         return self.action_open_purchase_lot_qr_wizard()
 
     def _ensure_picking_quantities_zero_for_scan(self):
         """ Ensure picking has Done quantities at 0 so scanning fills the transfer. """
         for picking in self:
             if picking.state not in ('done', 'cancel'):
+                if (
+                    picking.picking_type_code == 'internal'
+                    or (picking.purchase_id and picking.purchase_id.purchase_type == 'internal_po')
+                ):
+                    continue
                 if (
                     picking.picking_type_code == 'incoming'
                     and picking.purchase_id
@@ -265,7 +270,7 @@ class StockPicking(models.Model):
                     has_partial_scans = any(0 < ml.quantity < ml.move_id.product_uom_qty for ml in picking.move_line_ids)
                     if not has_partial_scans and all(ml.quantity == ml.move_id.product_uom_qty for ml in picking.move_line_ids if ml.move_id.product_uom_qty > 0):
                         picking.purchase_id._init_incoming_receipt_quantities()
-                else:
+                elif picking.picking_type_code == 'outgoing':
                     has_partial_scans = any(0 < ml.quantity < ml.move_id.product_uom_qty for ml in picking.move_line_ids)
                     if not has_partial_scans and all(ml.quantity == ml.move_id.product_uom_qty for ml in picking.move_line_ids if ml.move_id.product_uom_qty > 0):
                         for ml in picking.move_line_ids:
@@ -281,8 +286,8 @@ class StockPicking(models.Model):
     def action_open_picking_qr_scan_wizard(self):
         """ Open dedicated warehouse kiosk scanner wizard for any picking """
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
-            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
+            raise UserError(_("Custom QR scanning is not available for internal operations."))
         if self.state in ('done', 'cancel'):
             raise UserError(_("This transfer is already in state '%s' and cannot be processed.") % self.state)
         if self.picking_type_code == 'incoming' and self.is_receipt_locked_for_clearance:
@@ -308,18 +313,18 @@ class StockPicking(models.Model):
 
     def action_open_qr_scan_wizard(self):
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
             parent_action = getattr(super(), 'action_open_qr_scan_wizard', None)
             if parent_action:
                 return parent_action()
-            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
+            raise UserError(_("Custom QR scanning is not available for internal operations."))
         return self.action_open_picking_qr_scan_wizard()
 
     def action_process_qr_scan(self):
         """ Process scan from inline picking form view input """
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
-            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
+            raise UserError(_("Custom QR scanning is not available for internal operations."))
         if not self.qr_scan_input:
             return
 
@@ -421,8 +426,8 @@ class StockPicking(models.Model):
     def _process_picking_qr_payload(self, raw_string):
         """ Resolves parsed QR payload and updates picking move lines by exactly +1 unit """
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
-            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
+            raise UserError(_("Custom QR scanning is not available for internal operations."))
         if self.state in ('done', 'cancel'):
             raise UserError(_("Transfer '%s' is in state '%s' and cannot be modified.") % (self.name, self.state))
         if self.picking_type_code == 'incoming' and self.is_receipt_locked_for_clearance:
@@ -688,18 +693,18 @@ class StockPicking(models.Model):
 
     def _process_qr_payload(self, raw_string):
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
             parent_processor = getattr(super(), '_process_qr_payload', None)
             if parent_processor:
                 return parent_processor(raw_string)
-            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
+            raise UserError(_("Custom QR scanning is not available for internal operations."))
         return self._process_picking_qr_payload(raw_string)
 
     def action_open_picking_mobile_qr_wizard(self):
         """ Open dedicated mobile camera QR scanner for any transfer """
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
-            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
+            raise UserError(_("Custom QR scanning is not available for internal operations."))
         if self.state in ('done', 'cancel'):
             raise UserError(_("Transfer '%s' is in state '%s' and cannot be processed.") % (self.name, self.state))
         if self.picking_type_code == 'incoming' and self.is_receipt_locked_for_clearance:
@@ -723,9 +728,9 @@ class StockPicking(models.Model):
 
     def action_open_mobile_qr_scan_wizard(self):
         self.ensure_one()
-        if self.purchase_id and self.purchase_id.purchase_type == 'internal_po':
+        if self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
             parent_action = getattr(super(), 'action_open_mobile_qr_scan_wizard', None)
             if parent_action:
                 return parent_action()
-            raise UserError(_("Custom QR scanning is not available for internal purchase receipts."))
+            raise UserError(_("Custom QR scanning is not available for internal operations."))
         return self.action_open_picking_mobile_qr_wizard()

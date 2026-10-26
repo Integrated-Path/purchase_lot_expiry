@@ -138,23 +138,25 @@
             <!-- Add Lot, Expiry fields, and Redistribute Button in Order Line list view -->
             <xpath expr="//field[@name='order_line']/list/field[@name='price_unit']" position="after">
                 <field name="purchase_type" column_invisible="True"/>
+                <field name="logistics_stage" column_invisible="True"/>
                 <field name="product_tracking" column_invisible="True"/>
                 <field name="show_redistribute_button" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
-                <field name="expiration_date" optional="hide" invisible="parent.purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'" readonly="parent.purchase_type == 'external_po' and parent.logistics_stage != 'expiry_check'"/>
+                <field name="expiration_date" optional="hide" invisible="parent.purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'" readonly="parent.purchase_type == 'external_po' and parent.logistics_stage != 'expiry_check'"/>
                 <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
-                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="parent.purchase_type == 'internal_po' or not show_redistribute_button" string="Redistribute"/>
+                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="parent.purchase_type == 'internal_po' or not show_redistribute_button or parent.logistics_stage != 'expiry_check'" string="Redistribute"/>
             </xpath>
 
             <!-- Add Lot and Expiry fields in Order Line form view -->
             <xpath expr="//field[@name='order_line']/form//field[@name='price_unit']" position="after">
                 <field name="purchase_type" invisible="1"/>
+                <field name="logistics_stage" invisible="1"/>
                 <field name="product_tracking" invisible="1"/>
                 <field name="show_redistribute_button" invisible="1"/>
-                <field name="lot_ids" widget="many2many_tags" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
-                <field name="expiration_date" optional="hide" invisible="parent.purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
+                <field name="lot_ids" widget="many2many_tags" domain="[('product_id', '=', product_id)]" context="{'default_product_id': product_id}" options="{'no_quick_create': True}" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'" readonly="parent.purchase_type == 'external_po' and parent.logistics_stage != 'expiry_check'"/>
+                <field name="expiration_date" optional="hide" invisible="parent.purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'" readonly="parent.purchase_type == 'external_po' and parent.logistics_stage != 'expiry_check'"/>
                 <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="not product_tracking or product_tracking == 'none'" column_invisible="parent.purchase_type == 'internal_po'"/>
-                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="parent.purchase_type == 'internal_po' or not show_redistribute_button" string="Redistribute Lot Qty" class="btn btn-secondary mt-2"/>
+                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="parent.purchase_type == 'internal_po' or not show_redistribute_button or parent.logistics_stage != 'expiry_check'" string="Redistribute Lot Qty" class="btn btn-secondary mt-2"/>
             </xpath>
         </field>
     </record>
@@ -230,12 +232,13 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='product_qty']" position="after">
                 <field name="purchase_type" column_invisible="True"/>
+                <field name="logistics_stage" column_invisible="True"/>
                 <field name="product_tracking" column_invisible="True"/>
                 <field name="show_redistribute_button" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
-                <field name="expiration_date" optional="hide" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'" readonly="purchase_type == 'external_po' and logistics_stage != 'expiry_check'"/>
+                <field name="expiration_date" optional="hide" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'" readonly="purchase_type == 'external_po' and logistics_stage != 'expiry_check'"/>
                 <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
-                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="purchase_type == 'internal_po' or not show_redistribute_button"/>
+                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="purchase_type == 'internal_po' or not show_redistribute_button or logistics_stage != 'expiry_check'"/>
             </xpath>
         </field>
     </record>
@@ -248,12 +251,13 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='price_unit']" position="after">
                 <field name="purchase_type" invisible="1"/>
+                <field name="logistics_stage" invisible="1"/>
                 <field name="product_tracking" invisible="1"/>
                 <field name="show_redistribute_button" invisible="1"/>
-                <field name="lot_ids" widget="many2many_tags" domain="[('product_id', '=', product_id)]" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
-                <field name="expiration_date" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" domain="[('product_id', '=', product_id)]" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'" readonly="purchase_type == 'external_po' and logistics_stage != 'expiry_check'"/>
+                <field name="expiration_date" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'" readonly="purchase_type == 'external_po' and logistics_stage != 'expiry_check'"/>
                 <field name="lot_expiry_display" widget="badge" decoration-info="1" invisible="purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
-                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="purchase_type == 'internal_po' or not show_redistribute_button" string="Redistribute Lot Qty" class="btn btn-secondary mt-2"/>
+                <button name="action_open_lot_redistribution_wizard" type="object" icon="fa-balance-scale" title="Redistribute Lot Quantities" invisible="purchase_type == 'internal_po' or not show_redistribute_button or logistics_stage != 'expiry_check'" string="Redistribute Lot Qty" class="btn btn-secondary mt-2"/>
             </xpath>
         </field>
     </record>

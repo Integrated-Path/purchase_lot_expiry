@@ -56,6 +56,7 @@ class PurchaseLotRedistributeWizard(models.TransientModel):
     def action_distribute_evenly(self):
         self.ensure_one()
         self._ensure_external_purchase()
+        self._ensure_expiry_check_stage()
         nb_lines = len(self.line_ids)
         if nb_lines > 0:
             even_qty = self.product_qty / nb_lines
@@ -72,6 +73,7 @@ class PurchaseLotRedistributeWizard(models.TransientModel):
     def action_confirm(self):
         self.ensure_one()
         self._ensure_external_purchase()
+        self._ensure_expiry_check_stage()
         line = self.purchase_line_id
 
         # Safety Guard: Check if linked picking is done or bill is posted
@@ -118,6 +120,12 @@ class PurchaseLotRedistributeWizard(models.TransientModel):
         for wizard in self:
             if wizard.purchase_line_id.purchase_type == 'internal_po':
                 raise UserError(_("Lot redistribution is not available for internal purchase orders."))
+
+    def _ensure_expiry_check_stage(self):
+        for wizard in self:
+            line = wizard.purchase_line_id
+            if line.order_id and line.order_id.purchase_type != 'internal_po' and line.order_id.logistics_stage != 'expiry_check':
+                raise UserError(_("Lot redistribution can only be performed during the 'Expiry Check' stage (تدقيق تواريخ التلف)."))
 
 
 class PurchaseLotRedistributeWizardLine(models.TransientModel):

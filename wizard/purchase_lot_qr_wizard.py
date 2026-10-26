@@ -104,6 +104,8 @@ class PurchaseLotQrWizard(models.TransientModel):
 
     def _ensure_external_source(self):
         for wizard in self:
+            if wizard.picking_id and wizard.picking_id.picking_type_code == 'internal':
+                raise UserError(_("Custom QR labels are not available for internal operations."))
             purchase_order = wizard.purchase_id or wizard.picking_id.purchase_id
             if purchase_order and purchase_order.purchase_type == 'internal_po':
                 raise UserError(_("Custom QR labels are not available for internal purchase orders."))

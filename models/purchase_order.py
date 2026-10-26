@@ -145,6 +145,41 @@ class PurchaseOrder(models.Model):
             ):
                 order.picking_type_id = order.destination_warehouse_id.in_type_id
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if (
+                vals.get('purchase_type', 'internal_po') != 'internal_po'
+                and vals.get('logistics_stage', 'rfq') != 'expiry_check'
+            ):
+                order_lines = vals.get('order_line', [])
+                for cmd in order_lines:
+                    if isinstance(cmd, (list, tuple)) and len(cmd) > 2 and isinstance(cmd[2], dict):
+                        l_vals = cmd[2]
+                        has_lots = False
+                        if l_vals.get('lot_ids'):
+                            raw_val = l_vals['lot_ids']
+                            if isinstance(raw_val, (list, tuple)):
+                                for c in raw_val:
+                                    if isinstance(c, (list, tuple)) and c[0] in (4, 6) and (c[2] if c[0] == 6 else [c[1]]):
+                                        has_lots = True
+                                        break
+                            elif raw_val:
+                                has_lots = True
+                        if l_vals.get('pol_lot_ids') or l_vals.get('expiration_date'):
+                            has_lots = True
+                        if has_lots:
+                            stage = vals.get('logistics_stage', 'rfq')
+                            stage_name = dict(LOGISTICS_STAGES).get(stage, stage)
+                            raise UserError(_(
+                                "⚠️ لا يمكن إدخال أو تعديل أرقام التشغيلات (Lots) وتواريخ الصلاحية إلا في مرحلة 'تدقيق تواريخ التلف (Expiry Check)'.\n\n"
+                                "المرحلة الحالية لأمر الشراء هي: [%(stage)s].\n"
+                                "يرجى الانتقال إلى مرحلة 'تدقيق تواريخ التلف (Expiry Check)' لإضافة أو تعديل أرقام التشغيلات.\n\n"
+                                "Lots and expiration dates can only be inserted, added, or modified during the 'Expiry Check' stage (تدقيق تواريخ التلف).\n"
+                                "Current stage is: [%(stage)s]."
+                            ) % {'stage': stage_name})
+        return super(PurchaseOrder, self).create(vals_list)
+
     # Pipeline Stage Transition Methods
     def button_confirm(self):
         res = super(PurchaseOrder, self).button_confirm()
