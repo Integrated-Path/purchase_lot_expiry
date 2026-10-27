@@ -50,6 +50,10 @@ class PurchaseOrderLine(models.Model):
         string='Product Tracking',
         readonly=True
     )
+    is_lot_readonly = fields.Boolean(
+        string='Is Lot Readonly',
+        compute='_compute_is_lot_readonly'
+    )
     lot_ids = fields.Many2many(
         'stock.lot',
         'purchase_order_line_stock_lot_rel',
@@ -256,110 +260,18 @@ class PurchaseOrderLine(models.Model):
                         % {'product': line.product_id.display_name, 'bills': bill_names}
                     )
 
-    def _check_expiry_check_stage_for_lots(self, vals):
-        """
-        Ensure lots and expiration dates can only be inserted, added, or modified
-        during the 'Expiry Check' stage (تدقيق تواريخ التلف) for external purchase orders.
-        """
-        if self.env.context.get('skip_expiry_check_stage_guard'):
-            return
-
-        lot_fields = {'lot_ids', 'pol_lot_ids', 'expiration_date'}
-        if not (lot_fields & set(vals.keys())):
-            return
-
+    @api.depends('order_id.logistics_stage', 'order_id.purchase_type')
+    def _compute_is_lot_readonly(self):
         for line in self:
             order = line.order_id
-            if not order or order.purchase_type == 'internal_po':
-                continue
-
-            if order.logistics_stage != 'expiry_check':
-                is_changed = False
-                if 'lot_ids' in vals:
-                    raw_val = vals['lot_ids']
-                    new_ids = set()
-                    if isinstance(raw_val, (list, tuple)):
-                        for cmd in raw_val:
-                            if isinstance(cmd, (list, tuple)):
-                                if cmd[0] == 6:  # (6, 0, [ids])
-                                    new_ids = set(cmd[2])
-                                elif cmd[0] == 4:  # (4, id)
-                                    new_ids.add(cmd[1])
-                                elif cmd[0] == 5:  # (5, 0, 0)
-                                    new_ids = set()
-                                elif cmd[0] == 3:  # (3, id)
-                                    new_ids = set(line.lot_ids.ids) - {cmd[1]}
-                            elif isinstance(cmd, int):
-                                new_ids.add(cmd)
-                    elif raw_val:
-                        new_ids = set(raw_val.ids if hasattr(raw_val, 'ids') else [raw_val])
-
-                    current_ids = set(line.lot_ids.ids)
-                    if new_ids != current_ids:
-                        is_changed = True
-
-                if 'pol_lot_ids' in vals and not is_changed:
-                    is_changed = True
-
-                if 'expiration_date' in vals and not is_changed:
-                    new_exp = vals['expiration_date']
-                    cur_exp = fields.Datetime.to_string(line.expiration_date) if line.expiration_date else False
-                    if str(new_exp or False) != str(cur_exp or False):
-                        is_changed = True
-
-                if is_changed:
-                    stage_name = dict(order._fields['logistics_stage'].selection).get(order.logistics_stage, order.logistics_stage)
-                    raise UserError(_(
-                        "⚠️ لا يمكن إدخال أو تعديل أرقام التشغيلات (Lots) وتواريخ الصلاحية إلا في مرحلة 'تدقيق تواريخ التلف (Expiry Check)'.\n\n"
-                        "المرحلة الحالية لأمر الشراء %(order)s هي: [%(stage)s].\n"
-                        "يرجى الانتقال إلى مرحلة 'تدقيق تواريخ التلف (Expiry Check)' لإضافة أو تعديل أرقام التشغيلات.\n\n"
-                        "Lots and expiration dates can only be inserted, added, or modified during the 'Expiry Check' stage (تدقيق تواريخ التلف).\n"
-                        "Current stage of PO %(order)s is: [%(stage)s]."
-                    ) % {
-                        'order': order.name,
-                        'stage': stage_name,
-                    })
-
-    @api.model_create_multi
-    def create(self, vals_list):
-        if not self.env.context.get('skip_expiry_check_stage_guard'):
-            for vals in vals_list:
-                lot_fields = {'lot_ids', 'pol_lot_ids', 'expiration_date'}
-                if lot_fields & set(vals.keys()):
-                    order_id = vals.get('order_id')
-                    if order_id:
-                        order = self.env['purchase.order'].browse(order_id)
-                        if order.exists() and order.purchase_type != 'internal_po' and order.logistics_stage != 'expiry_check':
-                            has_lots = False
-                            if vals.get('lot_ids'):
-                                raw_val = vals['lot_ids']
-                                if isinstance(raw_val, (list, tuple)):
-                                    for cmd in raw_val:
-                                        if isinstance(cmd, (list, tuple)) and cmd[0] in (4, 6) and (cmd[2] if cmd[0] == 6 else [cmd[1]]):
-                                            has_lots = True
-                                            break
-                                elif raw_val:
-                                    has_lots = True
-                            if vals.get('pol_lot_ids') or vals.get('expiration_date'):
-                                has_lots = True
-                            if has_lots:
-                                stage_name = dict(order._fields['logistics_stage'].selection).get(order.logistics_stage, order.logistics_stage)
-                                raise UserError(_(
-                                    "⚠️ لا يمكن إدخال أو تعديل أرقام التشغيلات (Lots) وتواريخ الصلاحية إلا في مرحلة 'تدقيق تواريخ التلف (Expiry Check)'.\n\n"
-                                    "المرحلة الحالية لأمر الشراء %(order)s هي: [%(stage)s].\n"
-                                    "يرجى الانتقال إلى مرحلة 'تدقيق تواريخ التلف (Expiry Check)' لإضافة أو تعديل أرقام التشغيلات.\n\n"
-                                    "Lots and expiration dates can only be inserted, added, or modified during the 'Expiry Check' stage (تدقيق تواريخ التلف).\n"
-                                    "Current stage of PO %(order)s is: [%(stage)s]."
-                                ) % {
-                                    'order': order.name,
-                                    'stage': stage_name,
-                                })
-        return super(PurchaseOrderLine, self).create(vals_list)
+            if order and order.purchase_type == 'external_po':
+                line.is_lot_readonly = (order.logistics_stage != 'expiry_check')
+            else:
+                line.is_lot_readonly = False
 
     def write(self, vals):
         external_lines = self.filtered(lambda line: line.purchase_type != 'internal_po')
         if external_lines:
-            external_lines._check_expiry_check_stage_for_lots(vals)
             external_lines._check_modification_safety(vals)
         res = super(PurchaseOrderLine, self).write(vals)
         external_lines = self.filtered(lambda line: line.purchase_type != 'internal_po')

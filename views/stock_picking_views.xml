@@ -9,21 +9,22 @@
             <!-- Header Hidden Fields for Clearance Guard -->
             <xpath expr="//header" position="inside">
                 <field name="picking_type_code" invisible="1"/>
+                <field name="is_internal_transfer" invisible="1"/>
                 <field name="purchase_id" invisible="1"/>
                 <field name="purchase_type" invisible="1"/>
                 <field name="purchase_logistics_stage" invisible="1"/>
                 <field name="bill_logistics_stage" invisible="1"/>
                 <field name="is_receipt_locked_for_clearance" invisible="1"/>
                 <!-- Scanning and QR Labels Buttons (All picking types, respecting internal PO and internal operations exclusion) -->
-                <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan QR" class="btn btn-primary" icon="fa-barcode" invisible="state in ('done', 'cancel') or is_receipt_locked_for_clearance or (picking_type_code == 'incoming' and purchase_type == 'internal_po') or picking_type_code == 'internal'"/>
-                <button name="action_open_receipt_mobile_qr_scan_wizard" type="object" string="Scan via Mobile" class="btn btn-outline-primary" icon="fa-camera" groups="purchase_lot_expiry.group_mobile_qr_scan" invisible="state in ('done', 'cancel') or is_receipt_locked_for_clearance or (picking_type_code == 'incoming' and purchase_type == 'internal_po') or picking_type_code == 'internal'"/>
-                <button name="action_open_purchase_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="(picking_type_code == 'incoming' and purchase_type == 'internal_po') or picking_type_code == 'internal'"/>
+                <button name="action_open_receipt_qr_scan_wizard" type="object" string="Scan QR" class="btn btn-primary" icon="fa-barcode" invisible="is_internal_transfer or picking_type_code == 'internal' or state in ('done', 'cancel') or is_receipt_locked_for_clearance or (picking_type_code == 'incoming' and purchase_type == 'internal_po')"/>
+                <button name="action_open_receipt_mobile_qr_scan_wizard" type="object" string="Scan via Mobile" class="btn btn-outline-primary" icon="fa-camera" groups="purchase_lot_expiry.group_mobile_qr_scan" invisible="is_internal_transfer or picking_type_code == 'internal' or state in ('done', 'cancel') or is_receipt_locked_for_clearance or (picking_type_code == 'incoming' and purchase_type == 'internal_po')"/>
+                <button name="action_open_purchase_lot_qr_wizard" type="object" string="Print Lot QR Labels" class="btn btn-secondary" icon="fa-qrcode" invisible="is_internal_transfer or picking_type_code == 'internal' or (picking_type_code == 'incoming' and purchase_type == 'internal_po')"/>
             </xpath>
 
             <!-- Informative Status Banners and Inline Fast Scanner Bar above notebook -->
             <xpath expr="//notebook" position="before">
                 <!-- Warning Banner: View-Only until Clearance -->
-                <div class="alert alert-warning d-flex align-items-center mb-3 shadow-sm" role="status" invisible="not is_receipt_locked_for_clearance or purchase_type == 'internal_po' or picking_type_code == 'internal'">
+                <div class="alert alert-warning d-flex align-items-center mb-3 shadow-sm" role="status" invisible="is_internal_transfer or picking_type_code == 'internal' or not is_receipt_locked_for_clearance or purchase_type == 'internal_po'">
                     <i class="fa fa-lock fa-2x me-3 text-warning" title="الشحنة للعرض فقط" aria-label="الشحنة للعرض فقط"/>
                     <div>
                         <h5 class="mb-1 fw-bold">الشحنة للعرض فقط في المخازن (عرض فقط)</h5>
@@ -33,7 +34,7 @@
                 </div>
 
                 <!-- Success Banner: Clearance Stage Unlocked for Receiving -->
-                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="status" invisible="state in ('done', 'cancel') or not purchase_id or is_receipt_locked_for_clearance or purchase_type == 'internal_po' or picking_type_code == 'internal'">
+                <div class="alert alert-success d-flex align-items-center mb-3 shadow-sm" role="status" invisible="is_internal_transfer or picking_type_code == 'internal' or state in ('done', 'cancel') or not purchase_id or is_receipt_locked_for_clearance or purchase_type == 'internal_po'">
                     <i class="fa fa-unlock-alt fa-2x me-3 text-success" title="متاح للاستلام المخزني" aria-label="متاح للاستلام المخزني"/>
                     <div>
                         <h5 class="mb-1 fw-bold">متاح للاستلام المخزني</h5>
@@ -42,7 +43,7 @@
                 </div>
 
                 <!-- Inline Fast Scanner Bar -->
-                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="state in ('done', 'cancel') or is_receipt_locked_for_clearance or (picking_type_code == 'incoming' and purchase_type == 'internal_po') or picking_type_code == 'internal'">
+                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="is_internal_transfer or picking_type_code == 'internal' or state in ('done', 'cancel') or is_receipt_locked_for_clearance or (picking_type_code == 'incoming' and purchase_type == 'internal_po')">
                     <div class="row g-2 align-items-center">
                         <div class="col-auto">
                             <span class="badge bg-primary fs-6"><i class="fa fa-qrcode me-1"/> Fast QR Scan</span>
@@ -61,9 +62,11 @@
             <!-- Operations lines lot attributes -->
             <xpath expr="//field[@name='move_ids']/list/field[@name='product_id']" position="after">
                 <field name="purchase_type" column_invisible="True"/>
+                <field name="is_internal_transfer" column_invisible="True"/>
+                <field name="picking_code" column_invisible="True"/>
                 <field name="product_tracking" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" column_invisible="parent.purchase_type == 'internal_po' or parent.picking_type_code == 'internal'" invisible="not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" column_invisible="parent.purchase_type == 'internal_po' or parent.picking_type_code == 'internal'" invisible="not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" column_invisible="parent.is_internal_transfer or parent.picking_type_code == 'internal' or parent.purchase_type == 'internal_po'" invisible="is_internal_transfer or picking_code == 'internal' or parent.is_internal_transfer or parent.picking_type_code == 'internal' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" column_invisible="parent.is_internal_transfer or parent.picking_type_code == 'internal' or parent.purchase_type == 'internal_po'" invisible="is_internal_transfer or picking_code == 'internal' or parent.is_internal_transfer or parent.picking_type_code == 'internal' or not product_tracking or product_tracking == 'none'"/>
             </xpath>
         </field>
     </record>
@@ -76,7 +79,9 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='state']" position="before">
                 <field name="purchase_type" column_invisible="True"/>
-                <field name="purchase_logistics_stage" string="مرحلة الشحنة" widget="badge" decoration-warning="purchase_logistics_stage in ('shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="purchase_logistics_stage == 'clearance'" decoration-success="purchase_logistics_stage == 'received'" optional="show" invisible="purchase_type == 'internal_po' or picking_type_code == 'internal'"/>
+                <field name="is_internal_transfer" column_invisible="True"/>
+                <field name="picking_type_code" column_invisible="True"/>
+                <field name="purchase_logistics_stage" string="مرحلة الشحنة" widget="badge" decoration-warning="purchase_logistics_stage in ('shipment_booking', 'transport_port', 'on_the_way')" decoration-primary="purchase_logistics_stage == 'clearance'" decoration-success="purchase_logistics_stage == 'received'" optional="show" invisible="is_internal_transfer or picking_type_code == 'internal' or purchase_type == 'internal_po'" column_invisible="context.get('default_picking_type_code') == 'internal'"/>
             </xpath>
         </field>
     </record>
@@ -89,9 +94,11 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='product_id']" position="after">
                 <field name="purchase_type" column_invisible="True"/>
+                <field name="is_internal_transfer" column_invisible="True"/>
+                <field name="picking_code" column_invisible="True"/>
                 <field name="product_tracking" column_invisible="True"/>
-                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or picking_type_code == 'internal' or not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="purchase_type == 'internal_po' or picking_type_code == 'internal' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" optional="show" options="{'no_quick_create': True}" invisible="is_internal_transfer or picking_code == 'internal' or purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" optional="show" invisible="is_internal_transfer or picking_code == 'internal' or purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
             </xpath>
         </field>
     </record>
@@ -104,9 +111,11 @@
         <field name="arch" type="xml">
             <xpath expr="//field[@name='product_id']" position="after">
                 <field name="purchase_type" invisible="1"/>
+                <field name="is_internal_transfer" invisible="1"/>
+                <field name="picking_code" invisible="1"/>
                 <field name="product_tracking" invisible="1"/>
-                <field name="lot_ids" widget="many2many_tags" options="{'no_quick_create': True}" invisible="purchase_type == 'internal_po' or picking_type_code == 'internal' or not product_tracking or product_tracking == 'none'"/>
-                <field name="lot_expiry_display" widget="badge" decoration-info="1" invisible="purchase_type == 'internal_po' or picking_type_code == 'internal' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_ids" widget="many2many_tags" options="{'no_quick_create': True}" invisible="is_internal_transfer or picking_code == 'internal' or purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
+                <field name="lot_expiry_display" widget="badge" decoration-info="1" invisible="is_internal_transfer or picking_code == 'internal' or purchase_type == 'internal_po' or not product_tracking or product_tracking == 'none'"/>
             </xpath>
         </field>
     </record>

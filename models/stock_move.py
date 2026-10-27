@@ -16,6 +16,16 @@ class StockMove(models.Model):
         string='Product Tracking',
         readonly=True
     )
+    picking_type_code = fields.Selection(
+        related='picking_id.picking_type_code',
+        string='Picking Type Code',
+        readonly=True
+    )
+    is_internal_transfer = fields.Boolean(
+        string='Is Internal Transfer',
+        compute='_compute_is_internal_transfer',
+        store=True
+    )
     lot_expiry_display = fields.Char(
         string='Expiry Dates',
         compute='_compute_lot_expiry_display',
@@ -23,15 +33,23 @@ class StockMove(models.Model):
         help="Formatted list of expiry dates for assigned lot(s) in this stock move."
     )
 
+    @api.depends('picking_id.picking_type_code', 'picking_id.picking_type_id.code', 'picking_code')
+    def _compute_is_internal_transfer(self):
+        for move in self:
+            code = (move.picking_id and move.picking_id.picking_type_code) or move.picking_code or (move.picking_type_id and move.picking_type_id.code)
+            move.is_internal_transfer = (code == 'internal')
+
     @api.depends(
         'move_line_ids.expiration_date',
         'move_line_ids.lot_id',
         'move_line_ids.lot_id.expiration_date',
-        'purchase_type'
+        'purchase_type',
+        'is_internal_transfer',
+        'picking_code'
     )
     def _compute_lot_expiry_display(self):
         for move in self:
-            if move.purchase_type == 'internal_po':
+            if move.purchase_type == 'internal_po' or move.is_internal_transfer or move.picking_code == 'internal':
                 move.lot_expiry_display = False
                 continue
             expiries = []
