@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="purchase_lot_expiry.ReceiptQuickScanner">
+        <div class="o_receipt_quick_scanner_wrapper w-100 mb-3">
+            <div class="card border-primary shadow-sm bg-light p-3">
+                <!-- Header with scanner readiness indicator -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="fw-bold fs-6 text-primary mb-0 d-flex align-items-center">
+                        <i class="fa fa-qrcode fa-lg me-2 text-primary"/>
+                        <span>Quick Receipt Barcode / QR Scanner</span>
+                    </label>
+                    <div class="d-flex align-items-center">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-1 small me-2 d-flex align-items-center">
+                            <span class="o_scanner_pulse_dot me-1"/>
+                            <span>Scanner Gun Ready (Auto-Detect)</span>
+                        </span>
+                        <span t-if="state.scanCount > 0" class="badge bg-primary rounded-pill px-2 py-1 small">
+                            <t t-esc="state.scanCount"/> scans in session
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Main Scanner Input Bar -->
+                <div class="input-group input-group-lg shadow-sm">
+                    <span class="input-group-text bg-white border-primary text-primary">
+                        <i t-if="!state.isProcessing" class="fa fa-barcode fa-lg"/>
+                        <span t-if="state.isProcessing" class="spinner-border spinner-border-sm text-primary" role="status"/>
+                    </span>
+                    <input type="text"
+                           t-ref="scannerInput"
+                           t-on-keydown="onKeyDown"
+                           t-on-input="onInput"
+                           class="form-control form-control-lg border-primary fw-bold"
+                           placeholder="Point scanner gun and trigger scan... (Instant Auto-Read)"
+                           autocomplete="off"
+                           autofocus="autofocus"/>
+                    <button type="button"
+                            t-on-click="() => this.processScan()"
+                            class="btn btn-primary px-4 fw-bold"
+                            t-att-disabled="state.isProcessing">
+                        <i class="fa fa-arrow-right me-1"/> Scan
+                    </button>
+                </div>
+
+                <!-- Live Status & Activity Indicator -->
+                <div class="mt-2">
+                    <div t-attf-class="alert alert-#{state.lastStatusType} d-flex align-items-center py-2 px-3 mb-0 shadow-sm" role="alert">
+                        <i t-attf-class="fa #{state.lastStatusType == 'success' ? 'fa-check-circle text-success' : (state.lastStatusType == 'warning' ? 'fa-exclamation-triangle text-warning' : (state.lastStatusType == 'danger' ? 'fa-exclamation-triangle text-danger' : 'fa-info-circle text-primary'))} fs-5 me-2"/>
+                        <div class="flex-grow-1 fw-bold small text-truncate" t-esc="state.lastStatusMsg"/>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </t>
+</templates>

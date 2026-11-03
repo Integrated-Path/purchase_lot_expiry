@@ -95,6 +95,51 @@ class StockPickingQrScanWizard(models.TransientModel):
             }))
         self.write({'line_ids': lines_vals})
 
+    def action_quick_scan(self, raw_scan):
+        """
+        RPC endpoint called directly by the quick scanner OWL widget.
+        Executes receipt scan for this picking, updates wizard lines, and returns status.
+        """
+        self.ensure_one()
+        self._ensure_external_purchase()
+        if not raw_scan:
+            return {'success': False, 'message': _("Empty scan received.")}
+        try:
+            res = self.picking_id._process_receipt_qr_payload(raw_scan.strip()) if hasattr(self.picking_id, '_process_receipt_qr_payload') else self.picking_id._process_qr_payload(raw_scan.strip())
+            self._populate_lines()
+
+            now_str = fields.Datetime.now().strftime('%H:%M:%S')
+            is_success = False
+            msg = ""
+            if isinstance(res, dict) and res.get('params', {}).get('type') in ('success', 'warning'):
+                is_success = True
+                msg = res['params'].get('message', _("Scan successful."))
+                self.scan_status_message = msg
+                self.scan_status_type = res['params'].get('type', 'success')
+                new_entry = f"[{now_str}] ✓ {msg}"
+            else:
+                is_success = False
+                msg = res.get('params', {}).get('message') if (isinstance(res, dict) and 'params' in res) else _("Scan failed.")
+                self.scan_status_message = msg
+                self.scan_status_type = 'danger'
+                new_entry = f"[{now_str}] ✗ {msg}"
+
+            log_lines = (self.scan_log or "").splitlines()
+            log_lines.insert(0, new_entry)
+            self.scan_log = "\n".join(log_lines[:20])
+
+            return {'success': is_success, 'message': msg}
+        except Exception as e:
+            err_msg = str(e)
+            self.scan_status_message = err_msg
+            self.scan_status_type = 'danger'
+            now_str = fields.Datetime.now().strftime('%H:%M:%S')
+            new_entry = f"[{now_str}] ✗ {err_msg}"
+            log_lines = (self.scan_log or "").splitlines()
+            log_lines.insert(0, new_entry)
+            self.scan_log = "\n".join(log_lines[:20])
+            return {'success': False, 'message': err_msg}
+
     def action_process_scan(self):
         """ Process barcode/QR scan, refresh progress and keep modal open """
         self.ensure_one()

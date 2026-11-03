@@ -42,20 +42,10 @@
                     </div>
                 </div>
 
-                <!-- Inline Fast Scanner Bar -->
-                <div class="card p-2 mb-3 bg-light border-0 shadow-sm" invisible="is_internal_transfer or picking_type_code == 'internal' or state in ('done', 'cancel') or is_receipt_locked_for_clearance or (picking_type_code == 'incoming' and purchase_type == 'internal_po')">
-                    <div class="row g-2 align-items-center">
-                        <div class="col-auto">
-                            <span class="badge bg-primary fs-6"><i class="fa fa-qrcode me-1"/> Fast QR Scan</span>
-                        </div>
-                        <div class="col-md-6 col-12 d-flex">
-                            <field name="qr_scan_input" placeholder="Scan Lot / Product QR Code here..." class="form-control form-control-sm me-2"/>
-                            <button name="action_process_qr_scan" type="object" string="Scan" class="btn btn-sm btn-primary" icon="fa-barcode" />
-                        </div>
-                        <div class="col-md-4 col-12">
-                            <field name="qr_scan_status" widget="char" readonly="1" class="text-success fw-bold small" invisible="not qr_scan_status"/>
-                        </div>
-                    </div>
+                <!-- Quick Scanner for Receipts (Zero-Click Instant Gun Scanning) -->
+                <div class="mb-3" invisible="is_internal_transfer or picking_type_code == 'internal' or state in ('done', 'cancel') or is_receipt_locked_for_clearance or (picking_type_code == 'incoming' and purchase_type == 'internal_po')">
+                    <widget name="receipt_quick_scanner"/>
+                    <field name="qr_scan_input" invisible="1"/>
                 </div>
             </xpath>
 

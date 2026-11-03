@@ -332,6 +332,27 @@ class StockPicking(models.Model):
             raise UserError(_("Custom QR scanning is not available for internal operations."))
         return self.action_open_picking_qr_scan_wizard()
 
+    def action_quick_scan(self, raw_scan):
+        """
+        RPC endpoint called by the quick scanner OWL widget on picking form view.
+        """
+        self.ensure_one()
+        if self.is_internal_transfer or self.picking_type_code == 'internal' or (self.purchase_id and self.purchase_id.purchase_type == 'internal_po'):
+            return {'success': False, 'message': _("Custom QR scanning is not available for internal operations.")}
+        if not raw_scan:
+            return {'success': False, 'message': _("Empty scan received.")}
+        try:
+            res = self._process_receipt_qr_payload(raw_scan.strip())
+            if isinstance(res, dict) and res.get('params', {}).get('type') in ('success', 'warning'):
+                msg = res['params'].get('message', _("Scan successful."))
+                is_warn = res['params'].get('type') == 'warning'
+                return {'success': True, 'warning': is_warn, 'message': msg}
+            else:
+                msg = res.get('params', {}).get('message') if (isinstance(res, dict) and 'params' in res) else _("Scan failed.")
+                return {'success': False, 'message': msg}
+        except Exception as e:
+            return {'success': False, 'message': str(e)}
+
     def action_process_qr_scan(self):
         """ Process scan from inline picking form view input """
         self.ensure_one()
@@ -482,32 +503,53 @@ class StockPicking(models.Model):
                 lambda m: m.product_id.default_code == product_code or m.product_id.name == product_code
             )
 
-        # 4. Match by existing lot in open moves
+        # 4. Match by assigned lots in this receipt's open moves
         if not matched_move and lot_name:
-            existing_lots = self.env['stock.lot'].search([
-                ('name', '=', lot_name),
-                ('product_id', 'in', open_moves.mapped('product_id').ids)
-            ])
-            if existing_lots:
-                matched_move = open_moves.filtered(lambda m: m.product_id == existing_lots[0].product_id)
+            for m in open_moves:
+                move_allowed_lots = m.lot_ids | m.move_line_ids.lot_id
+                found = move_allowed_lots.filtered(
+                    lambda l: l.name == lot_name or (lot_name.lstrip('0') and l.name == lot_name.lstrip('0')) or (getattr(l, 'qr_code_value', False) and l.qr_code_value in (clean_string, raw_string))
+                )
+                if found:
+                    matched_move = m
+                    break
 
-        # If only 1 move in picking and lot_name is provided, match that single move
-        if not matched_move and len(open_moves) == 1:
-            matched_move = open_moves[0]
-
+        # STRICT LIMITATION:
+        # Do NOT allow arbitrary fallback to open_moves[0]. Scanned item must strictly belong to this receipt.
         if not matched_move:
-            msg = _("No matching move found on transfer %(transfer)s for scanned payload: %(payload)s") % {
-                'transfer': self.name,
-                'payload': raw_string,
-            }
+            allowed_products = open_moves.mapped('product_id')
+            prod_env = self.env['product.product']
+            foreign_prod = False
+            if product_id:
+                foreign_prod = prod_env.browse(product_id).exists()
+            if not foreign_prod and candidate_codes:
+                for c in candidate_codes:
+                    foreign_prod = prod_env.search(['|', ('barcode', '=', c), ('default_code', '=', c)], limit=1)
+                    if foreign_prod:
+                        break
+            if not foreign_prod and lot_name:
+                foreign_lot = self.env['stock.lot'].search([('name', '=', lot_name)], limit=1)
+                if foreign_lot:
+                    foreign_prod = foreign_lot.product_id
+
+            if foreign_prod and foreign_prod not in allowed_products:
+                msg = _("Product '%(prod)s' is not in this receipt order (%(receipt)s). You can only scan products that belong to this receipt.") % {
+                    'prod': foreign_prod.display_name,
+                    'receipt': self.name,
+                }
+            else:
+                msg = _("Scanned item '%(payload)s' does not match any product or lot in receipt order %(receipt)s.") % {
+                    'payload': clean_string,
+                    'receipt': self.name,
+                }
             self.qr_scan_status = msg
             return {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
                 'params': {
-                    'title': _('Scan Mismatch'),
+                    'title': _('Product / QR Not In Receipt'),
                     'message': msg,
-                    'type': 'warning',
+                    'type': 'danger',
                     'sticky': False,
                 }
             }
@@ -535,42 +577,75 @@ class StockPicking(models.Model):
                 }
 
             clean_raw = clean_string
-            existing_move_lots = (matched_move.lot_ids | matched_move.move_line_ids.lot_id).filtered(
-                lambda l: l.name == lot_name or (lot_name.lstrip('0') and l.name == lot_name.lstrip('0')) or (getattr(l, 'qr_code_value', False) and l.qr_code_value in (clean_raw, raw_string))
-            )
-            if existing_move_lots:
-                lot = existing_move_lots[0]
-            else:
-                domain = [
-                    '|', '|', ('name', '=', lot_name), ('qr_code_value', '=', clean_raw), ('qr_code_value', '=', raw_string),
-                    ('product_id', '=', product.id),
-                ]
-                if self.company_id:
-                    domain.extend(['|', ('company_id', '=', False), ('company_id', '=', self.company_id.id)])
-                lot = self.env['stock.lot'].search(domain, limit=1)
-                if not lot and lot_name.lstrip('0') and lot_name.lstrip('0') != lot_name:
-                    alt_domain = [('name', '=', lot_name.lstrip('0')), ('product_id', '=', product.id)]
-                    if self.company_id:
-                        alt_domain.extend(['|', ('company_id', '=', False), ('company_id', '=', self.company_id.id)])
-                    lot = self.env['stock.lot'].search(alt_domain, limit=1)
 
-            # Enforce lot must pre-exist: NO automatic lot creation upon scanning
-            if not lot:
-                msg = _("Lot/Serial number '%(lot)s' does not exist in inventory for '%(product)s'. Lots must be created and established before scanning.") % {
-                    'lot': lot_name,
-                    'product': product.display_name,
-                }
-                self.qr_scan_status = msg
-                return {
-                    'type': 'ir.actions.client',
-                    'tag': 'display_notification',
-                    'params': {
-                        'title': _('Unknown Lot Number'),
-                        'message': msg,
-                        'type': 'danger',
-                        'sticky': False,
+            # If the receipt move has pre-assigned lot(s) (e.g. from Purchase Order line):
+            if matched_move.lot_ids:
+                matching_assigned_lots = matched_move.lot_ids.filtered(
+                    lambda l: l.name == lot_name or (lot_name.lstrip('0') and l.name == lot_name.lstrip('0')) or (getattr(l, 'qr_code_value', False) and l.qr_code_value in (clean_raw, raw_string))
+                )
+                if not matching_assigned_lots:
+                    expected_names = ", ".join(matched_move.lot_ids.mapped('name'))
+                    msg = _("Lot '%(lot)s' does not belong to receipt order %(receipt)s for product '%(product)s'. Only the lots assigned to this receipt order (%(expected)s) can be scanned.") % {
+                        'lot': lot_name,
+                        'receipt': self.name,
+                        'product': product.display_name,
+                        'expected': expected_names,
                     }
-                }
+                    self.qr_scan_status = msg
+                    return {
+                        'type': 'ir.actions.client',
+                        'tag': 'display_notification',
+                        'params': {
+                            'title': _('Lot Not In Receipt'),
+                            'message': msg,
+                            'type': 'danger',
+                            'sticky': False,
+                        }
+                    }
+                lot = matching_assigned_lots[0]
+            else:
+                # If move has no pre-assigned lot_ids, check move line lots or open receipt moves
+                existing_move_lots = (matched_move.lot_ids | matched_move.move_line_ids.lot_id).filtered(
+                    lambda l: l.name == lot_name or (lot_name.lstrip('0') and l.name == lot_name.lstrip('0')) or (getattr(l, 'qr_code_value', False) and l.qr_code_value in (clean_raw, raw_string))
+                )
+                if existing_move_lots:
+                    lot = existing_move_lots[0]
+                else:
+                    domain = [
+                        '|', '|', ('name', '=', lot_name), ('qr_code_value', '=', clean_raw), ('qr_code_value', '=', raw_string),
+                        ('product_id', '=', product.id),
+                    ]
+                    if self.company_id:
+                        domain.extend(['|', ('company_id', '=', False), ('company_id', '=', self.company_id.id)])
+                    found_lot = self.env['stock.lot'].search(domain, limit=1)
+                    if not found_lot and lot_name.lstrip('0') and lot_name.lstrip('0') != lot_name:
+                        alt_domain = [('name', '=', lot_name.lstrip('0')), ('product_id', '=', product.id)]
+                        if self.company_id:
+                            alt_domain.extend(['|', ('company_id', '=', False), ('company_id', '=', self.company_id.id)])
+                        found_lot = self.env['stock.lot'].search(alt_domain, limit=1)
+
+                    if not found_lot:
+                        msg = _("Lot/Serial number '%(lot)s' does not exist in inventory for '%(product)s'. Lots must be created and established before scanning.") % {
+                            'lot': lot_name,
+                            'product': product.display_name,
+                        }
+                        self.qr_scan_status = msg
+                        return {
+                            'type': 'ir.actions.client',
+                            'tag': 'display_notification',
+                            'params': {
+                                'title': _('Unknown Lot Number'),
+                                'message': msg,
+                                'type': 'danger',
+                                'sticky': False,
+                            }
+                        }
+                    lot = found_lot
+
+            # Check if lot is expired and log a warning notice
+            if lot.expiration_date and lot.expiration_date < fields.Datetime.now():
+                exp_str = lot.expiration_date.strftime('%Y-%m-%d')
+                self.message_post(body=_("Notice: Scanned lot <b>%s</b> is expired (Expiry Date: %s).") % (lot.name, exp_str))
 
         # Check over-scanning: Block if adding 1 unit exceeds demanded quantity
         precision = self.env['decimal.precision'].precision_get('Product Unit of Measure')

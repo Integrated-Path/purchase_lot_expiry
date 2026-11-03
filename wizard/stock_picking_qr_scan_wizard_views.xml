@@ -26,17 +26,9 @@
                         </group>
                     </group>
 
-                    <!-- Scan Input Bar -->
-                    <div class="card p-3 mb-3 bg-light border-primary">
-                        <label for="scan_input" string="Scan Lot / Product QR Code" class="fw-bold fs-5 text-primary mb-2"/>
-                        <div class="input-group">
-                            <field name="scan_input" placeholder="Point scanner and scan QR code here..." default_focus="1" class="form-control form-control-lg"/>
-                            <button name="action_process_scan" type="object" string="Process Scan" class="btn btn-primary btn-lg" icon="fa-barcode" data-hotkey="s"/>
-                        </div>
-                        <small class="text-muted mt-1">
-                            Supports JSON, Pipe-delimited (PROD|LOT|EXP), GS1-128, or direct Lot scans. Each scan counts as 1 unit.
-                        </small>
-                    </div>
+                    <field name="scan_input" invisible="1"/>
+                    <!-- Quick Scanner OWL Widget (Zero-Click Instant Gun Scanning) -->
+                    <widget name="receipt_quick_scanner"/>
 
                     <notebook>
                         <page string="Fulfillment Progress">
