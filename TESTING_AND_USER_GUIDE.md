@@ -1,17 +1,19 @@
 # Purchase Lot & Serial Expiration Tracking with QR Automation (Odoo 19)
-**Module:** `purchase_lot_expiry` | **Version:** `19.0.3.0.0` | **License:** LGPL-3
+**Module:** `purchase_lot_expiry` | **Version:** `19.0.3.1.0` | **License:** LGPL-3
 
-This guide provides a comprehensive walkthrough of the Lot/Serial synchronization, dynamic QR label printing, and warehouse receiving scanning workflows for testing and training with your team.
+This guide provides a comprehensive walkthrough of the Purchase Lot/Serial synchronization, dynamic QR label printing, zero-click receipt quick scanning, and strict receipt order scope limitations for testing and training with your team.
 
 ---
 
 ## Table of Contents
 1. [Overview & Key Capabilities](#1-overview--key-capabilities)
-2. [Label Printing Options Explained](#2-label-printing-options-explained)
-3. [Warehouse Scanning Modes](#3-warehouse-scanning-modes)
-4. [Step-by-Step Team Testing Walkthrough](#4-step-by-step-team-testing-walkthrough)
-5. [Safety Validation Guards (Anti-Divergence Rules)](#5-safety-validation-guards-anti-divergence-rules)
-6. [Technical Reference & File Map](#6-technical-reference--file-map)
+2. [Zero-Click Quick Scan in Receipts](#2-zero-click-quick-scan-in-receipts)
+3. [Strict Receipt Scope Limitations (Anti-Contamination Rules)](#3-strict-receipt-scope-limitations-anti-contamination-rules)
+4. [Label Printing Options Explained](#4-label-printing-options-explained)
+5. [Warehouse Receiving Scanning Modes](#5-warehouse-receiving-scanning-modes)
+6. [Step-by-Step Team Testing Walkthrough](#6-step-by-step-team-testing-walkthrough)
+7. [Safety Validation Guards](#7-safety-validation-guards)
+8. [Technical Reference & File Map](#8-technical-reference--file-map)
 
 ---
 
@@ -20,165 +22,139 @@ This guide provides a comprehensive walkthrough of the Lot/Serial synchronizatio
 - **Procurement Lot Assignment**: Assign Lot/Serial numbers and expiration dates directly on Purchase Order lines before receiving.
 - **Dynamic Lot Redistribution**: Split and redistribute demand quantities across multiple lots via an interactive wizard.
 - **Instant Cascade Synchronization**: Automatically propagates lot assignments to linked active stock pickings and draft vendor bills.
-- **Lot-Centric Pure QR Labels**: Generates product and lot stickers (`PROD:<barcode>|LOT:<lot>|EXP:<date>`) independent of specific operations. Labels stick to products and can be scanned in any inventory operation.
+- **Zero-Click Quick Scanner Widget in Receipts**: Incorporates the instant scanning technology from sales into warehouse receipts: auto-focus, Arabic keyboard auto-translation, audio chimes (success chime and error buzz), and live DOM reloads without refreshing the page.
+- **Strict Receipt Order Scope Enforcement**: Warehouse workers are restricted to scanning **only** the products and lots belonging to the specific receipt being received. Scanning outside products or lots from other orders is strictly rejected.
+- **Lot-Centric Pure QR Labels**: Generates product and lot stickers (`PROD:<barcode>|LOT:<lot>|EXP:<date>`) independent of specific operations.
 - **Print Anywhere**: Print labels directly from **Inventory > Lots/Serial Numbers** (single form or batch multi-select), from Purchase Orders, Sales Orders, or any Stock Transfer.
-- **Precision 1-Scan = 1-Unit Fulfillment**: Every scan adds precisely 1.0 unit. Works across all picking types (Receipts, Deliveries, Internal transfers).
+- **Precision 1-Scan = 1-Unit Fulfillment**: Every scan adds precisely 1.0 unit.
 - **Over-Scanning Prevention**: Strictly blocks scanning once the demanded quantity is reached.
-- **Pre-Creation Enforcement**: Scanned lots must already exist in the system; creating unknown lots on the fly during scanning is prevented.
+- **Pre-Creation Enforcement**: Scanned lots must pre-exist in the system; creating unknown lots on the fly during receipt scanning is strictly prevented.
 - **Safety Locking Guards**: Strictly blocks accidental alteration of PO lots once the receipt is processed (`done`) or vendor bill is posted.
 
 ---
 
-## 2. Label Printing Options Explained
+## 2. Zero-Click Quick Scan in Receipts
 
-When opening the **Print Lot/Serial QR Labels** wizard (accessible from **Inventory > Lots/Serial Numbers**, **Purchase Order**, **Sales Order**, or any **Stock Transfer**), you will see:
+Warehouse operators receiving shipments with barcode/QR scanner guns previously had to click buttons or endure full-page reloads after every item scanned.
+
+The receipt scanning engine has been upgraded with the **Quick Scanner OWL Widget** (`receipt_quick_scanner`):
+1. **Zero Mouse Clicks**: The scanner input field maintains constant auto-focus with a pulsing readiness indicator. Point the scanner gun at box labels and pull the trigger.
+2. **Audio & Haptic Feedback**:
+   - **Success (High Chime - 880Hz)**: Crisp confirmation sound when an item is recognized and received (+1 unit).
+   - **Error (Sawtooth Buzz - 220Hz)**: Low warning buzz when a scan fails, over-scanning is attempted, or an unauthorized product/lot is scanned.
+   - **Vibration**: Supported on mobile and handheld Android terminal scanners.
+3. **Arabic Keyboard Auto-Translation**: Fixes scanner guns that send keystrokes mapped to Arabic keyboard layout (e.g. `PROD` typed as `؛ٌ×]`).
+4. **Instant In-Place Reload**: Live Done quantities, progress bars, and move lines update immediately without closing the modal or reloading the webpage.
+
+---
+
+## 3. Strict Receipt Scope Limitations (Anti-Contamination Rules)
+
+To eliminate warehouse receiving errors and cross-order contamination, receipt scanning enforces strict boundaries:
+
+### A. Product Scope Limitation
+- Only products that have open moves on the active receipt (`WH/IN/...`) are allowed to be scanned.
+- If a worker accidentally scans an item from another vendor, another shipment, or an unassociated product:
+  - **Result**: The scan is rejected with a red error badge:
+    `"Product '[Product Name]' is not in this receipt order (WH/IN/...). You can only scan products that belong to this receipt."`
+
+### B. Lot Scope Limitation
+- When purchase lines specify designated lots (e.g. `LOT-A`, `LOT-B` pre-assigned on the PO):
+  - Only those specific pre-assigned lots can be scanned to fulfill that line.
+  - If a worker scans a lot sticker belonging to another purchase order, an existing batch in another warehouse, or an unassigned lot:
+  - **Result**: The scan is strictly rejected with a detailed error:
+    `"Lot 'LOT-XYZ' does not belong to receipt order WH/IN/... for product '[Product Name]'. Only the lots assigned to this receipt order (LOT-A, LOT-B) can be scanned."`
+
+### C. Over-Scanning Prevention
+- Every scan accounts for precisely 1.0 unit. If a move has a demand of 5.0 units, attempting a 6th scan is blocked immediately:
+  `"Cannot scan: Required quantity (5.0) for '[Product Name]' is already fulfilled (Done: 5.0). Over-scanning is strictly blocked."`
+
+---
+
+## 4. Label Printing Options Explained
+
+When opening the **Print Lot/Serial QR Labels** wizard:
 
 ### A. Label Format (Physical Paper & Printer)
 | Option | Dimensions | Ideal Use Case |
 |---|---|---|
 | **Thermal Roll (50 x 30 mm)** | 50mm wide × 30mm high | Dedicated roll printers (Zebra, Brother, Xprinter, Dymo, TSC). Standard carton/box adhesive sticker. |
-| **Thermal Roll (40 x 20 mm)** | 40mm wide × 20mm high | Compact thermal roll for smaller parts, hardware, jewelry, or shelf tags. |
+| **Thermal Roll (40 x 20 mm)** | 40mm wide × 20mm high | Compact thermal roll for smaller parts, hardware, or shelf tags. |
 | **Avery Sheet (3 x 4 per page)** | Standard A4 Sheet | Regular office laser/inkjet printers using standard A4 sticker paper (12 peel-off labels per sheet). |
 
 ### B. QR Payload Format (Data Encoded Inside the QR Code)
 | Option | Encoded String Example | When to Use |
 |---|---|---|
-| **Structured Delimited** *(Recommended)* | `PROD:887766554433\|LOT:LOT-101\|EXP:2027-09-17` | **Best for standard 2D barcode scanner guns.** Pure product and lot identity sticker with no operation dependencies. |
+| **Structured Delimited** *(Recommended)* | `PROD:887766554433\|LOT:LOT-101\|EXP:2027-09-17` | **Best for standard 2D barcode scanner guns.** Combines SKU, Lot, and Expiration Date with no operation dependencies. |
 | **Structured JSON** | `{"b":"887766554433","l":"LOT-101","e":"2027-09-17"}` | Best for mobile phone cameras, automated optical sorters, and API integrations. |
 | **Plain Lot Number** | `LOT-101` | Encodes *only* the Lot/Serial text. Best if you want the QR code to behave purely like a traditional 1D barcode. |
 
 ---
 
-## 3. Warehouse Scanning Modes (All Picking Types)
+## 5. Warehouse Receiving Scanning Modes
 
-When handling inventory transfers (Incoming Receipts, Outgoing Deliveries, or Internal Transfers):
-
-### Mode 1: Fast QR Scan Bar (Directly on the Form)
-- Located directly above the Operations table on the receipt form:
-  ```text
-  [ Fast QR Scan ] [ Scan Lot / Product QR Code here... ]  [ Scan ]
-  ```
-- **Action**: Click into the field (or scan with a wireless 2D barcode gun).
-- **Result**: Odoo matches the product, assigns the lot, increments the received quantity, and shows a green status message:
-  `✓ Scanned [Product Name] | Lot: LOT-101 | Qty: +10.0 (Done: 10.0 / 10.0)`
-
-### Mode 2: Warehouse Kiosk Scanner Wizard ("Scan Receipt QR")
-- Click the **Scan Receipt QR** button in the receipt's top header.
-- A dedicated modal dialog opens with:
-  1. Auto-focused large scan input field.
-  2. Live progress tracker (Demand vs Received quantities per product and lot).
-  3. Real-time audit log with timestamped scan activity.
-  4. Automatic **"Validate Receipt"** button activation once all lines reach 100% completion.
+1. **Inline Quick Scanner Bar (Directly on Receipt Form)**:
+   - Visible above the notebook on incoming receipt forms:
+     ```text
+     [ Quick Receipt Barcode / QR Scanner ] [ Point scanner gun and trigger scan... ]
+     ```
+   - Automatically processes each scan and refreshes line quantities in place.
+2. **Kiosk Scanner Wizard ("Scan QR" Button)**:
+   - Click **Scan QR** in the receipt header to enter Kiosk mode.
+   - Features the large `receipt_quick_scanner` input, real-time demand vs received progress meters, activity log, and one-click **"Validate Transfer"** when 100% fulfilled.
+3. **Mobile Camera Scanner ("Scan via Mobile")**:
+   - Activates camera stream on mobile devices/tablets for live optical barcode scanning.
 
 ---
 
-## 4. Step-by-Step Team Testing Walkthrough
+## 6. Step-by-Step Team Testing Walkthrough
 
-Follow these 6 steps to test the entire lifecycle with your colleagues:
+### Step 1: Create a Tracked Product & Pre-Assign Lots on PO
+1. Create a product with **Tracking** set to `By Lots`.
+2. Create a **Purchase Order**, add the product (Quantity = 5.0).
+3. In the PO line, select or create lot `LOT-REC-01` (Expiry: 2027-01-01).
+4. Confirm the Purchase Order.
 
-### Step 1: Create a Tracked Product & Lots
-1. Navigate to **Inventory > Products > Products**.
-2. Create or open a product and ensure **Tracking** is set to `By Lots` or `By Unique Serial Number`.
-3. Give the product an **Internal Reference** (e.g. `PROD-TEST-01`) and a **Barcode** (e.g. `887766554433`).
+### Step 2: Open the Incoming Receipt
+1. Click the **Receipt** smart button (`WH/IN/...`).
+2. Notice the Quick Scanner bar is active above the operations notebook.
 
-### Step 2: Create and Confirm a Purchase Order
-1. Go to **Purchase > Orders > Purchase Orders** and click **New**.
-2. Select a Vendor and add an order line for your tracked product (e.g., Quantity = `10.0`).
-3. In the **Lots/Serial Numbers** column, select or create two lots:
-   - `LOT-A` (Allocated: 6.0, Expiry: 1 year from today)
-   - `LOT-B` (Allocated: 4.0, Expiry: 6 months from today)
-   *(If assigning multiple lots, click the **Redistribute** button to set individual quantities).*
-4. Click **Confirm Order**.
+### Step 3: Test Scope Limitation (Negative Tests)
+1. **Test A (Foreign Product)**: Scan a QR code for a completely different product not on this PO.
+   - **Expected Result**: Error buzz + red alert:
+     `"Product '...' is not in this receipt order (WH/IN/...). You can only scan products that belong to this receipt."`
+2. **Test B (Foreign Lot)**: Scan a QR code with the correct product barcode but a lot not assigned to this PO (e.g. `LOT-UNKNOWN`).
+   - **Expected Result**: Error buzz + red alert:
+     `"Lot 'LOT-UNKNOWN' does not belong to receipt order WH/IN/... for product '...'. Only the lots assigned to this receipt order (LOT-REC-01) can be scanned."`
 
-### Step 3: Verify Receipt Allocation & Redistribution
-1. Click the **Receipt** smart button on the PO to open the incoming transfer (`WH/IN/...`).
-2. Notice that the receipt's operation lines already have `LOT-A` (6.0) and `LOT-B` (4.0) pre-allocated!
-3. *(Optional Test)* Go back to the PO line, click **Redistribute**, change quantities to `7.0` and `3.0`, and confirm. Return to the receipt: the lines are immediately updated to `7.0` and `3.0`.
-
-### Step 4: Print QR Labels
-1. On the Purchase Order or the Receipt, click **Print Lot QR Labels**.
-2. Select **Thermal Roll (50 x 30 mm)** and **Structured Delimited**.
-3. Click **Print QR Labels**:
-   - The PDF downloads with pages formatted to **50mm × 30mm**.
-   - Each label features the dynamic QR code on the left and Product Name, Barcode, Bold Lot Number, Expiration Date, and Quantity on the right.
-4. *(Optional Test)* Switch to **Avery Sheet (3 x 4 per page)**: Odoo prints a standard A4 sheet with 12 labels in a grid.
-
-### Step 5: Test QR Code Scanning
-1. On the Receipt (`WH/IN/...`), test scanning either:
-   - **Method A**: Scan the printed QR code (or paste the payload `PROD:887766554433|LOT:LOT-A|EXP:2027-09-17|QTY:7.0`) into the **Fast QR Scan** input on the form.
-   - **Method B**: Click **Scan Receipt QR** in the header to open Kiosk Mode, scan the QR code, and watch the live progress bar update.
-2. Once all items are scanned, click **Validate Receipt**.
-3. The transfer state changes to **Done**.
-
-### Step 6: Test the Safety Guard
-1. Return to the Purchase Order.
-2. Attempt to delete or edit the Lot/Serial numbers or order quantity on the line.
-3. **Expected Result**: Odoo intercepts the action and displays a safety error:
-   > *"Cannot modify Lot/Serial numbers, quantities, or expiration dates on PO line because linked receipt(s) have already been processed and marked as Done. Please process returns or scrap adjustments instead."*
+### Step 4: Test Authorized Scan (Positive Test)
+1. Scan the authorized QR payload: `PROD:<barcode>|LOT:LOT-REC-01|EXP:2027-01-01`.
+2. **Expected Result**:
+   - Crisp high chime sound plays.
+   - Done quantity increments by 1.0 unit.
+   - Field auto-clears and retains focus for the next scan.
+3. Continue scanning until all 5 units are fulfilled.
+4. Click **Validate** to mark receipt as Done.
 
 ---
 
-## 5. Safety Validation Guards (Anti-Divergence Rules)
+## 7. Safety Validation Guards
 
-To prevent accounting and inventory mismatches:
-- If a linked incoming receipt (`stock.picking`) is in `done` state:
-  **PO lot numbers, expiration dates, and quantities are locked.**
-- If a linked vendor bill (`account.move`) is in `posted` state:
-  **PO lot numbers, expiration dates, and quantities are locked.**
-- If the receipt is still in `draft`, `waiting`, or `assigned` (ready) state:
-  **Modifications cascade automatically to update stock move lines and draft vendor bills.**
+- **Locked Completed Receipts**: Once a linked incoming receipt (`stock.picking`) is in `done` state, PO lot numbers, expiration dates, and quantities are strictly locked.
+- **Posted Vendor Bills**: Once a linked vendor bill (`account.move`) is posted, PO line lot allocations are locked.
+- **Clearance Stage Guard**: In import purchase workflows, receipts remain locked in view-only mode until the vendor bill / PO reaches the **Clearance** logistics stage.
 
 ---
 
-## 6. Technical Reference & File Map
+## 8. Technical Reference & File Map
 
 | File Path | Description |
 |---|---|
-| `models/purchase_order_line.py` | PO Line lot allocations, cascade sync, and safety validation guards. |
-| `models/stock_picking.py` | Fast scanner input, multi-format QR parser, and receipt QR triggers. |
-| `wizard/purchase_lot_redistribute_wizard.py` | Interactive lot redistribution wizard with safety checks. |
-| `wizard/purchase_lot_qr_wizard.py` | Dynamic QR code generation wizard with layout options. |
-| `wizard/stock_picking_qr_scan_wizard.py` | Dedicated warehouse kiosk scanning wizard with one-click validation. |
-| `report/purchase_lot_qr_report.xml` | Report action and custom paperformat definitions (50x30mm, 40x20mm). |
-| `report/purchase_lot_qr_report_templates.xml` | QWeb PDF report templates using Odoo's dynamic barcode engine. |
-| `views/purchase_order_views.xml` | PO form view extensions and "Print Lot QR Labels" button. |
-| `views/stock_picking_views.xml` | Stock receipt form view extensions, fast scanner bar, and header buttons. |
-| `security/ir.model.access.csv` | Access rights for all models and transient wizards. |
-| `__manifest__.py` | Module metadata, dependencies (`barcodes`), and registered data files. |
-
----
-
-## 7. Logistics Pipeline & Clearance Checklist Workflow (New in v19.0.3.0.0)
-
-### A. The 10-Stage Logistics Pipeline
-Every Purchase Order tracks physical and documentary milestones via sequential action buttons and an interactive statusbar:
-1. **طلب سعر (RFQ)**: Standard draft procurement stage.
-2. **أمر شراء (PO)**: Confirmed purchase order with supplier. In this stage:
-   - Select **نوع الشحن (Freight Type)**: بحرية (Sea Freight) or جوية (Air Freight).
-   - Select **المخزن المستلم (Destination Warehouse)**: Auto-syncs with the incoming operation type (`picking_type_id`).
-3. **قيد التصنيع (Manufacturing)**: Goods are undergoing factory manufacturing overseas.
-4. **تدقيق تواريخ التلف (Expiry Check)**: Verification of production batches, lots, and expiration dates.
-5. **فاتورة شراء (PI - Purchase/Proforma Invoice)**:
-   - **Warehouse Integration**: The complete receipt (`stock.picking`) appears in the warehouse system with all products, quantities, lots, and expiration dates.
-   - **Read-Only Lock (عرض فقط)**: The receipt is strictly view-only in the warehouse. Warehouse workers cannot validate or scan materials. Clear warning banners indicate receiving is locked.
-6. **حجز الشحنة (Shipment Booking)**: Container/air cargo space booking.
-7. **نقل البضاعة للميناء / المطار (Transport to Port/Airport)**: Inland transit to port of loading.
-8. **الشحنة في الطريق (Shipment on the way)**: International sea or air transit.
-9. **التخليص (Clearance)**:
-   - **Warehouse Receiving Unlocked**: At this stage, the incoming shipment is completely unlocked for warehouse receiving.
-   - The **Validate (اعتماد)** button, **Scan Receipt QR** desktop wizard, and **Mobile Camera QR Scanner** become fully active and available.
-10. **الاستلام المخزني (Received by warehouse)**: Once warehouse validates the receipt, the purchase order automatically transitions to completed receipt.
-
-### B. Approvals & Customs Checklist (قائمة الموافقات والتخليص)
-Visible from PO stage and all subsequent stages under a dedicated tab on both the **Purchase Order** and the **Vendor Bill**:
-- **موافقة وزارة الصحة (MOH Approval)**: Checkbox toggle, reference number, approval date, and attachment upload link.
-- **موافقة وزارة التجارة (MOT Approval)**: Checkbox toggle, import license reference, date, and attachment upload link.
-- **التصديق (Attestation & Legalization)**: Checkbox toggle, certificate of origin reference, date, and attachment upload link.
-- **إخراج كمرك (Customs Release)**: Checkbox toggle, customs manifest reference, date, and attachment upload link.
-
-### C. Purchase Order & Vendor Bill Two-Way Synchronization
-- **Centralized Control**: The logistics pipeline stages (`rfq` through `received`) and action buttons are managed directly on the **Purchase Order**.
-- **Real-Time Synchronization**: The linked **Vendor Bill (`account.move`)** reflects the current logistics stage via a read-only statusbar widget and displays the logistics truck information banner.
-- **Bi-Directional Checklist Sync**: Updates to the clearance checklist (approval toggles, dates, reference numbers, and PDF attachments) on either the Purchase Order or the Vendor Bill automatically synchronize to the other document in real time.
-- **Warehouse Clearance Gate**: The warehouse receipt (`stock.picking`) is locked in view-only mode until the Purchase Order reaches **التخليص (Clearance)**. Once warehouse receiving is validated, both the Purchase Order and linked Vendor Bill advance automatically to **الاستلام المخزني (Received)**.
-
+| `static/src/widgets/receipt_quick_scanner/` | OWL component providing zero-click receipt scanning, auto-focus, audio chimes, and Arabic keystroke decoding. |
+| `models/stock_picking.py` | Receipt QR processing engine, strict product/lot scope validations, and `action_quick_scan` RPC endpoint. |
+| `wizard/stock_picking_qr_scan_wizard.py` | Warehouse receipt scanning kiosk with `action_quick_scan` integration. |
+| `wizard/stock_picking_qr_scan_wizard_views.xml` | Kiosk modal view integrating the `receipt_quick_scanner` widget. |
+| `views/stock_picking_views.xml` | Stock picking form view extensions with inline `receipt_quick_scanner` bar. |
+| `models/purchase_order_line.py` | PO Line lot allocations, expiration computations, and cascade sync to receipts. |
+| `wizard/purchase_lot_qr_wizard.py` | Dynamic QR code label printing wizard (Thermal 50x30, 40x20, Avery A4). |
+| `report/purchase_lot_qr_report_templates.xml` | QWeb PDF label layouts. |
